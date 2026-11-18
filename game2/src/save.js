@@ -5,7 +5,7 @@ const DEFAULT = () => ({
   levels: {}, // id -> { done, berries: [b,b,b], best, time }
   deaths: 0,
   playTime: 0,
-  options: { master: 0.8, music: 0.6, sfx: 0.8, preview: true, shake: true, fullscreen: false },
+  options: { master: 0.8, music: 0.6, sfx: 0.8, preview: true, shake: true, fullscreen: false, muted: false, skin: 'plain' },
 });
 
 export class Save {

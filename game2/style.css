@@ -26,7 +26,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .hud-r button { pointer-events: auto; width: 42px; height: 42px; border-radius: 14px; background: var(--panel); border: 2px solid var(--line); font-size: 18px; font-weight: 800; box-shadow: 0 2px 0 rgba(120,80,50,.15); }
 .hud-r button:active { transform: translateY(2px); box-shadow: none; }
 .hud-c { padding: 6px 12px; border-radius: 99px; background: var(--panel); border: 2px solid var(--line); }
-.tip { position: absolute; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); transform: translate(-50%, 20px); padding: 12px 20px; border-radius: 16px; background: var(--panel); border: 2px solid var(--line); font-size: 17px; font-weight: 700; opacity: 0; transition: opacity .35s, transform .35s; max-width: 90vw; text-align: center; word-break: keep-all; box-shadow: 0 4px 0 rgba(120,80,50,.12); }
+.tip { position: absolute; left: 50%; bottom: max(28px, env(safe-area-inset-bottom)); transform: translate(-50%, 20px); padding: 12px 20px; border-radius: 16px; background: var(--panel); border: 2px solid var(--line); font-size: 17px; font-weight: 700; opacity: 0; transition: opacity .35s, transform .35s; width: max-content; max-width: 90vw; text-align: center; word-break: keep-all; box-shadow: 0 4px 0 rgba(120,80,50,.12); }
 .tip.show { opacity: 1; transform: translate(-50%, 0); }
 #fps { position: fixed; left: 10px; bottom: 8px; font: 12px monospace; color: #555; pointer-events: none; }
 
@@ -53,8 +53,8 @@ h2.pop { font-size: 46px; color: var(--accent); animation: pop .4s ease-out; tex
 .logo { text-align: center; margin-top: 3vh; }
 .logo-kr { font-size: clamp(54px, 11vw, 96px); font-weight: 900; color: #ff7a59; letter-spacing: 2px; text-shadow: 0 3px 0 #fff, 0 -3px 0 #fff, 3px 0 0 #fff, -3px 0 0 #fff, 0 9px 0 #e2795a, 0 14px 24px rgba(200,100,60,.25); line-height: 1.1; }
 .logo-en { font-size: 15px; letter-spacing: 8px; color: var(--muted); margin-top: 8px; }
-.mochi-big { width: 92px; height: 74px; margin: 0 auto 8px; background: radial-gradient(circle at 35% 30%, #fff, #f6ecdc); border: 3px solid #e7d4b9; border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%; position: relative; animation: bob 1.6s ease-in-out infinite; }
-.mochi-big span::before, .mochi-big span::after { content: ""; position: absolute; top: 30px; width: 8px; height: 11px; border-radius: 50%; background: #3a2a22; }
+.mochi-big { width: 92px; height: 74px; margin: 0 auto 8px; background: radial-gradient(circle at 35% 30%, var(--mochi-hi, #fff), var(--mochi-lo, #f6ecdc)); border: 3px solid var(--mochi-line, #e7d4b9); border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%; position: relative; animation: bob 1.6s ease-in-out infinite; }
+.mochi-big span::before, .mochi-big span::after { content: ""; position: absolute; top: 30px; width: 8px; height: 11px; border-radius: 50%; background: var(--mochi-eye, #3a2a22); }
 .mochi-big span::before { left: 30px; } .mochi-big span::after { right: 30px; }
 .mochi-big::before, .mochi-big::after { content: ""; position: absolute; top: 44px; width: 13px; height: 7px; border-radius: 50%; background: rgba(255,140,160,.6); }
 .mochi-big::before { left: 14px; } .mochi-big::after { right: 14px; }
@@ -116,4 +116,33 @@ h2.pop { font-size: 46px; color: var(--accent); animation: pop .4s ease-out; tex
 @media (max-height: 480px) {
   .logo { margin-top: 0; } .mochi-big { display: none; }
   .menu button { padding: 8px 18px; }
+}
+
+/* medals */
+i.medal { display: inline-block; width: 22px; height: 22px; border-radius: 50%; vertical-align: middle; border: 2px solid rgba(0,0,0,.12); box-shadow: inset 0 -3px 0 rgba(0,0,0,.12), 0 1px 0 rgba(0,0,0,.1); }
+i.medal.gold { background: radial-gradient(circle at 35% 30%, #fff3b0, #f5b301); }
+i.medal.silver { background: radial-gradient(circle at 35% 30%, #ffffff, #b9c2cc); }
+i.medal.bronze { background: radial-gradient(circle at 35% 30%, #ffd9b8, #c47a3f); }
+.cell { position: relative; }
+.cell i.medal { position: absolute; top: 6px; right: 6px; width: 16px; height: 16px; }
+.medalrow { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-radius: 99px; background: var(--panel); border: 2px solid var(--line); font-size: 16px; }
+.medalrow i.medal { width: 30px; height: 30px; animation: pop .45s .25s ease-out backwards; }
+
+/* skins */
+.skins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
+.skin { padding: 14px 6px 10px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; gap: 4px; border: 2px solid var(--line); background: var(--panel); box-shadow: 0 4px 0 #f0d3b6; }
+.skin small { color: var(--muted); font-size: 13px; }
+.skin.on { border-color: var(--accent); background: #fff1ea; }
+.skin.focus { outline: 3px solid var(--accent); outline-offset: 2px; }
+.skin.locked { opacity: .55; }
+.skin.locked .mochi-mini { filter: grayscale(1) brightness(.85); }
+.mochi-mini { width: 54px; height: 44px; border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%; background: radial-gradient(circle at 35% 30%, var(--hi), var(--lo)); border: 2px solid var(--line); position: relative; }
+.mochi-mini.rainbow { background: linear-gradient(#ff9aa2, #ffdac1, #e2f0cb, #b5ead7, #c7ceea); }
+.mochi-mini::before, .mochi-mini::after { content: ""; position: absolute; top: 17px; width: 5px; height: 7px; border-radius: 50%; background: var(--eye); }
+.mochi-mini::before { left: 17px; } .mochi-mini::after { right: 17px; }
+.hud-r #btn-mute { font-size: 16px; }
+@media (max-width: 560px) {
+  .skins { grid-template-columns: repeat(2, 1fr); }
+  .hud-r { flex-wrap: wrap; justify-content: flex-end; max-width: 150px; }
+  #launches { order: 5; }
 }

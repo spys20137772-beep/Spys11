@@ -5,6 +5,7 @@ import { UI } from './ui.js';
 import { Play } from './play.js';
 import { LEVELS, WORLDS } from './levels.js';
 import { DT } from './physics.js';
+import { skinById, medalFor } from './skins.js';
 
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
@@ -74,12 +75,23 @@ app.levelClear = (play) => {
   app.ui.show('clear', {
     id: play.def.id, name: play.def.name, got: w.got, launches: w.launches, time: w.time,
     deaths: app.save.data.deaths - app.deathsAtStart, last: play.index === LEVELS.length - 1, ...res,
+    par: play.par, medal: medalFor(w.launches, play.par),
   });
 };
 
+app.toggleMute = () => {
+  const o = app.save.data.options;
+  o.muted = !o.muted;
+  app.applyOptions();
+  app.ui.updateMute();
+};
+app.applySkinCss = () => {
+  const sk = skinById(app.save.data.options.skin), st = document.documentElement.style;
+  st.setProperty('--mochi-hi', sk.hi); st.setProperty('--mochi-lo', sk.lo); st.setProperty('--mochi-line', sk.line); st.setProperty('--mochi-eye', sk.eye);
+};
 app.applyOptions = (changed) => {
   const o = app.save.data.options;
-  app.sound.setVolumes({ master: o.master, music: o.music, sfx: o.sfx });
+  app.sound.setVolumes({ master: o.muted ? 0 : o.master, music: o.music, sfx: o.sfx });
   if (changed === 'fullscreen') {
     try {
       if (o.fullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen();
@@ -135,7 +147,9 @@ function frame(now) {
   if (input.pressed.has('F3')) { app.showFps = !app.showFps; fpsEl.textContent = ''; }
 
   if (app.state === 'playing' && app.play) {
-    if (input.act('pause') || document.hidden) app.pause();
+    if (input.drag && input.act('pause')) { input.drag = null; }
+    else if (input.act('pause') || document.hidden) app.pause();
+    else if (input.pressed.has('KeyM')) app.toggleMute();
     else if (input.act('restart')) app.restart();
     else app.play.update(dt, input);
   } else {
@@ -166,6 +180,8 @@ if (params.has('test')) {
 }
 
 app.applyOptions();
+app.applySkinCss();
+app.ui.updateMute();
 app.ui.show('title');
 app.sound.music('menu');
 requestAnimationFrame(frame);

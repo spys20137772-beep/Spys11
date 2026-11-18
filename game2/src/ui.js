@@ -1,5 +1,8 @@
 // DOM menus and HUD, with keyboard / gamepad navigation.
 import { LEVELS, WORLDS } from './levels.js';
+import { SKINS, medalFor, MEDAL_NAME } from './skins.js';
+import { PARS } from './pars.js';
+const medalIcon = (m) => (m ? `<i class="medal ${m}"></i>` : '');
 
 const $ = (s, r = document) => r.querySelector(s);
 const isElectron = navigator.userAgent.includes('Electron');
@@ -25,6 +28,7 @@ export class UI {
     });
     $('#btn-pause').addEventListener('click', (e) => { e.stopPropagation(); app.pause(); });
     $('#btn-restart').addEventListener('click', (e) => { e.stopPropagation(); app.restart(); });
+    $('#btn-mute').addEventListener('click', (e) => { e.stopPropagation(); app.sound.init(); app.toggleMute(); });
   }
 
   show(name, arg) {
@@ -98,11 +102,12 @@ export class UI {
       <div class="menu">
         <button data-nav data-act="continue">${any ? '이어하기' : '시작하기'}</button>
         <button data-nav data-act="select">스테이지 선택</button>
+        <button data-nav data-act="skins">꾸미기</button>
         <button data-nav data-act="options">설정</button>
         <button data-nav data-act="credits">만든 사람</button>
         ${isElectron ? '<button data-nav data-act="quit">게임 종료</button>' : ''}
       </div>
-      <div class="records">딸기 ${s.totalBerries()} / ${LEVELS.length * 3} · 클리어 ${Object.values(s.data.levels).filter((l) => l.done).length} / ${LEVELS.length}</div>
+      <div class="records">딸기 ${s.totalBerries()} / ${LEVELS.length * 3} · 클리어 ${Object.values(s.data.levels).filter((l) => l.done).length} / ${LEVELS.length} · 금메달 ${LEVELS.filter((l) => medalFor(s.level(l.id).best, PARS[l.id]) === 'gold').length}</div>
       <div class="hint">${TOUCH ? '화면을 당겼다 놓으면 찰떡이 날아가요' : '마우스로 당겼다 놓기 · 방향키로 조준하고 Space · R 다시 시작 · Esc 일시정지'}</div>`;
   }
 
@@ -117,7 +122,7 @@ export class UI {
       const rec = s.level(l.id), open = this.app.unlocked(i);
       const b = rec.berries.map((x) => (x ? BERRY : NOBERRY)).join('');
       return `<button data-nav data-level="${i}" class="cell t-${W.theme} ${open ? '' : 'locked'} ${rec.done ? 'done' : ''}" ${this.app.nextLevel() === i ? 'data-autofocus' : ''}>
-        <b>${open ? l.id.split('-')[1] : '🔒'}</b><span class="nm">${open ? l.name : '잠김'}</span><span class="bs">${open ? b : ''}</span></button>`;
+        ${rec.done ? medalIcon(medalFor(rec.best, PARS[l.id])) : ''}<b>${open ? l.id.split('-')[1] : '🔒'}</b><span class="nm">${open ? l.name : '잠김'}</span><span class="bs">${open ? b : ''}</span></button>`;
     }).join('');
     return `
       <h2>스테이지 선택</h2>
@@ -138,6 +143,26 @@ export class UI {
       </div>
       <div class="sub">볼륨은 ← → 로도 조절할 수 있어요</div>
       <div class="menu"><button data-nav data-back>뒤로</button></div>`;
+  }
+
+  html_skins() {
+    const s = this.app.save, have = s.totalBerries(), cur = s.data.options.skin;
+    const cards = SKINS.map((k) => {
+      const open = have >= k.need;
+      return `<button data-nav data-skin="${k.id}" class="skin ${open ? '' : 'locked'} ${cur === k.id ? 'on' : ''}" ${cur === k.id ? 'data-autofocus' : ''}>
+        <span class="mochi-mini ${k.rainbow ? 'rainbow' : ''}" style="--hi:${k.hi};--lo:${k.lo};--line:${k.line};--eye:${k.eye}"></span>
+        <b>${k.name}</b><small>${open ? (cur === k.id ? '사용 중' : '고르기') : `딸기 ${k.need}개`}</small></button>`;
+    }).join('');
+    return `
+      <h2>꾸미기</h2>
+      <div class="sub">딸기를 모으면 새 찰떡이 열려요 · 지금 ${BERRY} ${have}개</div>
+      <div class="skins">${cards}</div>
+      <div class="menu"><button data-nav data-back>뒤로</button></div>`;
+  }
+
+  updateMute() {
+    const m = this.app.save.data.options.muted;
+    $('#btn-mute').textContent = m ? '🔇' : '🔊';
   }
 
   html_credits() {
@@ -170,6 +195,7 @@ export class UI {
       <h2 class="pop">클리어!</h2>
       <div class="sub">${r.id} ${r.name}</div>
       <div class="bigberries">${b}</div>
+      <div class="medalrow">${medalIcon(r.medal)}<span><b>${MEDAL_NAME[r.medal]}</b>${r.medal === 'gold' ? ' 최고예요!' : ` · 금메달은 점프 ${r.par + 1}번 이하`}</span></div>
       <div class="result">
         <div><small>점프</small><b>${r.launches}</b>${r.newBest && !r.firstClear ? '<em>최고 기록!</em>' : ''}</div>
         <div><small>시간</small><b>${fmt(r.time)}</b></div>
@@ -213,6 +239,13 @@ export class UI {
         app.sound.play('click'); app.startLevel(i); return;
       }
       if (b.dataset.range) { this.setFocus(this.items.indexOf(b), false); return; }
+      if (b.dataset.skin) {
+        const k = SKINS.find((x) => x.id === b.dataset.skin);
+        if (app.save.totalBerries() < k.need) { app.sound.play('die'); return; }
+        app.save.data.options.skin = k.id; app.save.write(); app.applySkinCss(); app.sound.play('berry');
+        const f = this.focus; this.show('skins'); this.setFocus(f, false);
+        return;
+      }
       if (b.dataset.toggle) {
         const o = app.save.data.options, k = b.dataset.toggle;
         o[k] = !o[k];
@@ -228,6 +261,7 @@ export class UI {
         case 'select': this.world = WORLDS.findIndex((w) => w.id === LEVELS[Math.min(app.nextLevel(), LEVELS.length - 1)].world); if (app.play) app.toSelect(); else this.push('select'); break;
         case 'options': this.push('options'); break;
         case 'credits': this.push('credits'); break;
+        case 'skins': this.push('skins'); break;
         case 'quit': window.close(); break;
         case 'resume': app.resume(); break;
         case 'restart': app.restart(); break;
@@ -247,7 +281,7 @@ export class UI {
       this.hudKey = key;
       $('#lvname').textContent = `${play.def.id} ${play.def.name}`;
       $('#hudberries').innerHTML = w.got.map((g) => (g ? BERRY : NOBERRY)).join('');
-      $('#launches').textContent = `점프 ${w.launches}`;
+      $('#launches').textContent = `점프 ${w.launches} / 금 ${play.par + 1}`;
     }
   }
 

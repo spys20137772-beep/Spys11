@@ -11,7 +11,12 @@ export class Input {
     this.drag = null;         // {id, ox, oy, x, y} in CSS px
     this.released = null;     // {dx, dy} pull vector on release (consumed by game)
     this.enabled = () => false;
+    this.dragEndAt = -1e9;
     addEventListener('keydown', (e) => {
+      // Esc while aiming (or right as the browser drops the drag) cancels the aim instead of pausing
+      if (e.code === 'Escape' && (this.drag || performance.now() - this.dragEndAt < 200)) {
+        this.drag = null; this.released = null; this.dragEndAt = -1e9; e.preventDefault(); return;
+      }
       if (!this.keys.has(e.code)) this.pressed.add(e.code);
       this.keys.add(e.code);
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) e.preventDefault();
@@ -21,21 +26,28 @@ export class Input {
   }
 
   attach(el) {
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
     el.addEventListener('pointerdown', (e) => {
       window.focus();
+      if (e.button === 2) { this.drag = null; return; } // right click cancels aiming
       if (!this.enabled() || this.drag) return;
       this.drag = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
       try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       e.preventDefault();
     });
     el.addEventListener('pointermove', (e) => {
-      if (this.drag && this.drag.id === e.pointerId) { this.drag.x = e.clientX; this.drag.y = e.clientY; }
+      if (!this.drag || this.drag.id !== e.pointerId) return;
+      // right button pressed while dragging with the left one (chorded press) cancels
+      if (e.pointerType === 'mouse' && (e.buttons & 2)) { this.drag = null; this.dragEndAt = performance.now(); return; }
+      this.drag.x = e.clientX; this.drag.y = e.clientY;
     });
+    el.addEventListener('mousedown', (e) => { if (e.button === 2) { this.drag = null; this.dragEndAt = performance.now(); } });
     const end = (e, cancel) => {
       const d = this.drag;
       if (!d || d.id !== e.pointerId) return;
       this.drag = null;
-      if (!cancel) this.released = { dx: d.x - d.ox, dy: d.y - d.oy };
+      if (cancel) this.dragEndAt = performance.now();
+      else this.released = { dx: d.x - d.ox, dy: d.y - d.oy };
     };
     el.addEventListener('pointerup', (e) => end(e, false));
     el.addEventListener('pointercancel', (e) => end(e, true));

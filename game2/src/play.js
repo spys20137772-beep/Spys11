@@ -1,6 +1,11 @@
 // One level being played: input -> physics -> effects -> camera -> drawing.
 import { parseLevel, World, DT, TILE, R, T, launchFromPull, predict, MAX_LAUNCH, MIN_LAUNCH, CRUMBLE_TIME } from './physics.js';
 import { LEVELS, WORLDS } from './levels.js';
+import { skinById } from './skins.js';
+import { PARS } from './pars.js';
+
+// shorter aim preview in later worlds so aiming stays a skill
+const PREVIEW_SECS = [0.8, 0.5, 0.35];
 
 const TAU = Math.PI * 2;
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -49,6 +54,14 @@ export class Play {
     this.pred = null;
     this.blinkT = 2;
     this.flagT = [];
+    this.par = PARS[this.def.id] || 0;
+    this.skin = skinById(app.save.data.options.skin);
+    this.buffer = null;
+    this.dragSmall = false;
+    // goal preview: show the goal first when it starts off-screen
+    const dist = Math.hypot(this.L.goal.x - this.L.start.x, this.L.goal.y - this.L.start.y);
+    this.intro = dist > 260 ? { t: 0, hold: 0.8, pan: 1.0 } : null;
+    if (this.intro) { this.cam.x = this.L.goal.x; this.cam.y = this.L.goal.y; }
     this.dynamic = [];
     for (let i = 0; i < this.L.grid.length; i++) {
       const t = this.L.grid[i];
@@ -67,9 +80,12 @@ export class Play {
 
     // aiming
     let aimVec = null, launchVec = null;
+    if (this.intro && (input.drag || input.pressed.size || input.padPressed.size)) this.intro = null;
+    this.dragSmall = false;
     if (input.drag) {
       const dx = input.drag.x - input.drag.ox, dy = input.drag.y - input.drag.oy;
       if (Math.hypot(dx, dy) > 12) { aimVec = launchFromPull(dx, dy, maxPull); this.aim.active = false; }
+      else this.dragSmall = true;
     }
     if (input.released) {
       const r = input.released; input.released = null;
@@ -91,9 +107,18 @@ export class Play {
       aimVec = { vx: Math.cos(this.aim.ang) * sp, vy: Math.sin(this.aim.ang) * sp, k: this.aim.k };
       if (input.act('launch')) launchVec = aimVec;
     }
-    if (launchVec && w.canLaunch()) w.launch(launchVec.vx, launchVec.vy);
+    // a release just before landing is kept for a moment instead of being dropped
+    if (launchVec && !w.canLaunch() && !p.dead) this.buffer = { v: launchVec, t: 0.25 };
+    if (!launchVec && this.buffer) {
+      this.buffer.t -= dt;
+      if (w.canLaunch()) launchVec = this.buffer.v;
+      if (this.buffer.t <= 0 || p.dead) this.buffer = null;
+    }
+    if (launchVec && w.canLaunch()) { w.launch(launchVec.vx, launchVec.vy); this.buffer = null; this.intro = null; }
     this.aimVec = w.canLaunch() ? aimVec : null;
-    this.pred = this.aimVec && app.save.data.options.preview ? predict(w, this.aimVec.vx, this.aimVec.vy, 0.85, 3) : null;
+    this.waitingAim = !w.canLaunch() && !!aimVec;
+    const secs = PREVIEW_SECS[this.def.world - 1] || 0.5;
+    this.pred = this.aimVec && app.save.data.options.preview ? predict(w, this.aimVec.vx, this.aimVec.vy, secs, 3) : null;
 
     // physics
     if (this.deadT > 0) {
@@ -121,8 +146,13 @@ export class Play {
     const view = app.view;
     const hw = view.cw / view.scale / 2, hh = view.ch / view.scale / 2;
     let tx = p.x, ty = p.y;
+    if (this.intro) {
+      const it = this.intro; it.t += dt;
+      if (it.t < it.hold) { tx = this.L.goal.x; ty = this.L.goal.y; }
+      else if (it.t > it.hold + it.pan) this.intro = null;
+    }
     if (this.aimVec) { const m = Math.hypot(this.aimVec.vx, this.aimVec.vy) || 1; tx += this.aimVec.vx / m * 80; ty += this.aimVec.vy / m * 80; }
-    const k = Math.min(1, dt * 5);
+    const k = Math.min(1, dt * (this.intro && this.intro.t > this.intro.hold ? 3 : 5));
     this.cam.x += (tx - this.cam.x) * k;
     this.cam.y += (ty - this.cam.y) * k;
     const LW = this.L.W * TILE, LH = this.L.H * TILE;
@@ -387,6 +417,10 @@ export class Play {
     }
 
     if (!p.dead) this.drawMochi(ctx);
+    if (this.dragSmall && w.canLaunch() && !p.dead) {
+      ctx.font = 'bold 13px system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillText('여기서 놓으면 취소', p.x, p.y - R - 14);
+    }
 
     // particles
     for (const q of this.parts) {
@@ -398,6 +432,27 @@ export class Play {
     }
     ctx.globalAlpha = 1;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.drawGoalArrow(ctx, cw, ch, camX, camY, scale);
+  }
+
+  // Edge marker pointing at the goal when it is off-screen.
+  drawGoalArrow(ctx, cw, ch, camX, camY, scale) {
+    if (this.intro || this.clearT > 0) return;
+    const g = this.L.goal;
+    const gx = cw / 2 + (g.x - camX) * scale, gy = ch / 2 + (g.y - camY) * scale;
+    const m = 46 * this.app.view.dpr;
+    if (gx > m && gx < cw - m && gy > m * 2 && gy < ch - m) return;
+    const cx = cw / 2, cy = ch / 2, dx = gx - cx, dy = gy - cy;
+    const k = Math.min((cw / 2 - m) / Math.abs(dx || 1e-6), (ch / 2 - m * 1.6) / Math.abs(dy || 1e-6));
+    const x = cx + dx * k, y = cy + dy * k, a = Math.atan2(dy, dx), d = this.app.view.dpr;
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(255,252,246,0.92)'; ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 3 * d;
+    ctx.beginPath(); ctx.arc(0, 0, 18 * d, 0, TAU); ctx.fill(); ctx.stroke();
+    drawStar(ctx, 0, 0, 9 * d, '#ffd36e', '#e8a33a');
+    ctx.rotate(a);
+    ctx.fillStyle = '#ffb347';
+    ctx.beginPath(); ctx.moveTo(30 * d, 0); ctx.lineTo(20 * d, -8 * d); ctx.lineTo(20 * d, 8 * d); ctx.fill();
+    ctx.restore();
   }
 
   drawBackground(ctx, cw, ch, camX, camY, scale) {
@@ -466,27 +521,34 @@ export class Play {
     ctx.scale(along, perp);
     ctx.fillStyle = 'rgba(0,0,0,0.12)';
     ctx.beginPath(); ctx.arc(1.5, 2, R, 0, TAU); ctx.fill();
+    const sk = this.skin;
     const gr = ctx.createRadialGradient(-4, -5, 2, 0, 0, R);
-    gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#f6ecdc');
+    gr.addColorStop(0, sk.hi); gr.addColorStop(1, sk.lo);
     ctx.fillStyle = gr;
     ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#e0cfb5'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (sk.rainbow) {
+      const cols = ['#ff9aa2', '#ffdac1', '#e2f0cb', '#b5ead7', '#c7ceea'];
+      ctx.save(); ctx.clip();
+      cols.forEach((c, i) => { ctx.fillStyle = c; ctx.globalAlpha = 0.75; ctx.fillRect(-R, -R + i * (2 * R / 5), 2 * R, 2 * R / 5 + 0.5); });
+      ctx.restore(); ctx.globalAlpha = 1;
+    }
+    ctx.strokeStyle = sk.line; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.restore();
     // face
     let lx = 0, ly = 0;
     const v = this.aimVec || (p.stuck ? null : { vx: p.vx, vy: p.vy });
     if (v) { const m = Math.hypot(v.vx, v.vy) || 1; lx = v.vx / m * 3.5; ly = v.vy / m * 3.5; }
     const blink = this.blinkT < 0;
-    ctx.fillStyle = '#3a2a22';
+    ctx.fillStyle = this.skin.eye;
     for (const ex of [-4.5, 4.5]) {
       ctx.beginPath();
       if (blink) ctx.fillRect(ex + lx - 2, ly - 1, 4, 1.6);
       else ctx.ellipse(ex + lx, ly - 1, 1.9, 2.6, 0, 0, TAU);
       ctx.fill();
     }
-    ctx.fillStyle = 'rgba(255,140,160,0.55)';
+    ctx.fillStyle = this.skin.cheek;
     ctx.beginPath(); ctx.ellipse(-8 + lx * 0.6, 3 + ly * 0.6, 2.8, 1.8, 0, 0, TAU); ctx.ellipse(8 + lx * 0.6, 3 + ly * 0.6, 2.8, 1.8, 0, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#3a2a22'; ctx.lineWidth = 1.2;
+    ctx.strokeStyle = this.skin.eye; ctx.lineWidth = 1.2;
     ctx.beginPath();
     if (!p.stuck) { ctx.arc(lx, 3 + ly, 2.2, 0, TAU); }
     else { ctx.moveTo(lx - 2.5, 3 + ly); ctx.quadraticCurveTo(lx - 1.2, 4.6 + ly, lx, 3 + ly); ctx.quadraticCurveTo(lx + 1.2, 4.6 + ly, lx + 2.5, 3 + ly); }
