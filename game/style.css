@@ -12,7 +12,9 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden; user-select: none; }
-canvas#c { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
+canvas#c { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+html, body { touch-action: none; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+#pausebtn { pointer-events: auto; width: 40px; height: 40px; margin-bottom: 2px; border-radius: 10px; background: rgba(10,12,18,.75); border: 1px solid #3a3326; font-size: 16px; font-weight: 800; color: var(--text); }
 .hidden { display: none !important; }
 
 /* ---------------------------------------------------------------- HUD */
@@ -109,6 +111,29 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 
 @media (max-width: 640px) {
   .result { grid-template-columns: repeat(2, 1fr); }
-  .card { width: 100%; min-height: 0; }
+  .result b { font-size: 22px; }
+  .cards { flex-direction: column; width: 100%; gap: 10px; }
+  .card { width: 100%; min-height: 0; flex-direction: row; text-align: left; padding: 12px 14px; gap: 12px; display: grid; grid-template-columns: 52px 1fr; grid-template-rows: auto auto auto; }
+  .card .ic { grid-row: 1 / 4; font-size: 38px; align-self: center; }
+  .card .tag { grid-column: 2; justify-self: start; }
+  .card b, .card small { grid-column: 2; }
+  .card.focus { transform: none; }
+  h2, .s-levelup h2 { font-size: 28px; }
   .timer { font-size: 22px; }
+  .hud-row { top: 20px; left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); }
+  .slot { width: 28px; height: 28px; font-size: 15px; }
+  .slots { max-width: 34vw; }
+  .stats { font-size: 14px; }
+  .bossbar { top: 62px; }
+  .banner { white-space: normal; text-align: center; width: 90vw; font-size: 20px; }
+  .menu button { padding: 12px 18px; font-size: 17px; }
+  .screen { padding: 14px 16px; gap: 12px; }
+  .shop-row .ic { font-size: 22px; width: 30px; }
+}
+@media (max-height: 480px) {
+  .logo { margin: 1vh 0 0; }
+  .logo-kr { font-size: 48px; }
+  .hint { margin-top: 0; }
+  .menu { gap: 6px; }
+  .menu button { padding: 8px 18px; }
 }

@@ -17,6 +17,31 @@ export class Input {
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
+    // virtual joystick: press anywhere on the game and drag (touch or mouse)
+    this.stick = null; // {id, ox, oy, x, y}
+    this.stickEnabled = () => false;
+  }
+
+  attachStick(el) {
+    const R = 60;
+    el.addEventListener('pointerdown', (e) => {
+      window.focus();
+      if (!this.stickEnabled() || this.stick) return;
+      this.stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0, R };
+      try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      e.preventDefault();
+    });
+    el.addEventListener('pointermove', (e) => {
+      const s = this.stick;
+      if (!s || s.id !== e.pointerId) return;
+      let dx = e.clientX - s.ox, dy = e.clientY - s.oy;
+      const d = Math.hypot(dx, dy);
+      if (d > R) { s.ox += dx * (1 - R / d); s.oy += dy * (1 - R / d); dx = e.clientX - s.ox; dy = e.clientY - s.oy; }
+      s.x = dx / R; s.y = dy / R;
+    });
+    const end = (e) => { if (this.stick && this.stick.id === e.pointerId) this.stick = null; };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
   }
 
   poll() {
@@ -56,6 +81,10 @@ export class Input {
       if (b[15]?.pressed) x += 1;
       if (b[12]?.pressed) y -= 1;
       if (b[13]?.pressed) y += 1;
+    }
+    if (this.stick) {
+      const m = Math.hypot(this.stick.x, this.stick.y);
+      if (m > 0.15) { x += this.stick.x; y += this.stick.y; }
     }
     const l = Math.hypot(x, y);
     if (l > 1) { x /= l; y /= l; }

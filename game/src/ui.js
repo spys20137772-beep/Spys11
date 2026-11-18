@@ -4,6 +4,7 @@ import { META, metaCost, WEAPONS, PASSIVES } from './content.js';
 const $ = (sel, root = document) => root.querySelector(sel);
 const fmt = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const isElectron = navigator.userAgent.includes('Electron');
+const TOUCH = matchMedia('(pointer: coarse)').matches;
 
 export class UI {
   constructor(app) {
@@ -16,7 +17,9 @@ export class UI {
     this.stack = [];
     this.hudCache = {};
     // mouse: hovering moves focus; buttons never take DOM focus
-    this.root.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+    // keep keyboard focus on the page (matters when embedded in an iframe), but never on a button,
+    // so Enter/Space are handled once by our own navigation
+    this.root.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) b.blur(); window.focus(); });
     this.root.addEventListener('mousemove', (e) => {
       const el = e.target.closest('[data-nav]');
       if (el) { const i = this.items.indexOf(el); if (i >= 0 && i !== this.focus) this.setFocus(i, false); }
@@ -104,7 +107,7 @@ export class UI {
       <div class="records">
         최고 기록 ${fmt(d.best.time)} · 처치 ${d.best.kills} · 클리어 ${d.wins}회
       </div>
-      <div class="hint">이동 WASD / 방향키 / 게임패드 · 선택 Enter · 일시정지 Esc</div>`;
+      <div class="hint">${TOUCH ? '화면을 누른 채 끌면 그 방향으로 이동합니다' : '이동 WASD / 방향키 / 게임패드 / 마우스 끌기 · 선택 Enter · 일시정지 Esc'}</div>`;
   }
 
   html_shop() {

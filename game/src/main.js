@@ -105,10 +105,30 @@ function resize() {
   canvas.width = Math.floor(innerWidth * dpr);
   canvas.height = Math.floor(innerHeight * dpr);
   // world units visible vertically ~ 720 at any resolution
-  const zoom = Math.max(0.6, Math.min(2.2, innerHeight / 720));
+  // ~720 world units tall on a desktop; on a narrow phone keep at least ~500 units across
+  const zoom = Math.max(0.6, Math.min(2.2, innerHeight / 720, innerWidth / 500));
   app.view = { cw: canvas.width, ch: canvas.height, scale: dpr * zoom, dpr };
 }
 addEventListener('resize', resize);
+app.input.attachStick(canvas);
+app.input.stickEnabled = () => app.state === 'playing';
+document.getElementById('pausebtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (app.state === 'playing') { app.state = 'paused'; app.ui.show('pause'); }
+});
+
+function renderStick() {
+  const s = app.input.stick;
+  if (!s || app.state !== 'playing') return;
+  const d = app.view.dpr;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.strokeStyle = 'rgba(253,230,138,0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(s.ox, s.oy, s.R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(253,230,138,0.55)';
+  ctx.beginPath(); ctx.arc(s.ox + s.x * s.R, s.oy + s.y * s.R, 22, 0, Math.PI * 2); ctx.fill();
+}
 resize();
 
 function renderTitle(dt) {
@@ -157,7 +177,7 @@ function frame(now) {
 
   const g = app.game;
   if (app.state === 'playing' && g) {
-    if (input.act('pause')) {
+    if (input.act('pause') || document.hidden) {
       app.state = 'paused';
       app.ui.show('pause');
     } else {
@@ -177,6 +197,7 @@ function frame(now) {
 
   if (g && app.state !== 'title') {
     g.render(ctx, app.view, app.sprites);
+    renderStick();
     app.ui.updateHud(g);
   } else {
     renderTitle(rawDt);
