@@ -1,0 +1,21 @@
+{
+  "name": "chaltteok-jump",
+  "productName": "ChaltteokJump",
+  "version": "1.0.0",
+  "description": "찰떡 점프 - a sticky physics launch platformer",
+  "main": "electron-main.js",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=build/game.js",
+    "solve": "node tests/solve.mjs",
+    "serve": "npm run build && python3 -m http.server 8081",
+    "start": "npm run build && electron .",
+    "dist:win": "npm run build && electron-packager . ChaltteokJump --platform=win32 --arch=x64 --out=dist --overwrite --ignore=^/src --ignore=^/dist --ignore=^/tests"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.3.6",
+    "electron": "^33.2.1",
+    "esbuild": "^0.24.2"
+  }
+}

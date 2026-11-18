@@ -1,0 +1,19 @@
+{
+  "name": "lanternbound",
+  "productName": "Lanternbound",
+  "version": "1.0.0",
+  "description": "등불지기 - a survivors-like action roguelite",
+  "main": "electron-main.js",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=iife --target=es2020 --outfile=build/game.js",
+    "serve": "npm run build && python3 -m http.server 8080",
+    "start": "npm run build && electron .",
+    "dist:win": "npm run build && electron-packager . Lanternbound --platform=win32 --arch=x64 --out=dist --overwrite --ignore=^/src --ignore=^/dist --ignore=^/tests"
+  },
+  "devDependencies": {
+    "@electron/packager": "^18.3.6",
+    "electron": "^33.2.1",
+    "esbuild": "^0.24.2"
+  }
+}
