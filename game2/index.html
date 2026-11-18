@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>찰떡 점프 - Chaltteok Jump</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hud" class="hidden">
+    <div class="hud-l"><span id="lvname"></span></div>
+    <div class="hud-c" id="hudberries"></div>
+    <div class="hud-r">
+      <span id="launches">점프 0</span>
+      <button id="btn-restart" aria-label="다시 시작">↻</button>
+      <button id="btn-pause" aria-label="일시정지">Ⅱ</button>
+    </div>
+    <div id="tip" class="tip"></div>
+  </div>
+  <div id="screens" class="hidden"></div>
+  <div id="fps"></div>
+  <script src="build/game.js"></script>
+</body>
+</html>
