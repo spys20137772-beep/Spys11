@@ -19,6 +19,11 @@
 
 ## 설치 방법
 
+### 가장 쉬운 방법: 파일 하나로 실행
+`TycoonGame.rbxlx`를 다운받아서 더블클릭 (또는 Studio → 파일 → 열기) → ▶ 플레이. 끝.
+
+> 코드를 수정한 뒤 이 파일을 다시 만들려면: `python3 tools/build_place.py`
+
 ### 방법 A: Rojo (추천)
 1. [Rokit](https://github.com/rojo-rbx/rokit) 설치 후 이 폴더에서 `rokit install` (또는 Rojo를 직접 설치)
 2. Studio에 Rojo 플러그인 설치
