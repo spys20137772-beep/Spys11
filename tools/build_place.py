@@ -1,10 +1,15 @@
-"""src/ 폴더의 스크립트들을 Studio에서 바로 열 수 있는 TycoonGame.rbxlx 한 파일로 묶는다.
-사용법: python3 tools/build_place.py
+"""src/ 폴더의 스크립트들을 Studio에서 바로 열 수 있는 .rbxlx 한 파일로 묶는다.
+사용법:
+  python3 tools/build_place.py                         -> 타이쿤 (TycoonGame.rbxlx)
+  python3 tools/build_place.py bingui BinguiGame.rbxlx -> 빙의 대소동
 """
 import os
+import sys
 from xml.sax.saxutils import escape
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.join(REPO, sys.argv[1]) if len(sys.argv) > 1 else REPO
+OUT_NAME = sys.argv[2] if len(sys.argv) > 2 else "TycoonGame.rbxlx"
 _ref = 0
 
 
@@ -56,7 +61,7 @@ xml = (
     + body + "</roblox>\n"
 )
 
-out = os.path.join(ROOT, "TycoonGame.rbxlx")
+out = os.path.join(REPO, OUT_NAME)
 with open(out, "w", encoding="utf-8") as f:
     f.write(xml)
 print("wrote", out, len(xml), "bytes")

@@ -1,0 +1,5176 @@
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
+<Item class="Workspace" referent="RBX00000001"><Properties><string name="Name">Workspace</string></Properties></Item>
+<Item class="ReplicatedStorage" referent="RBX00000004"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX00000003"><Properties><string name="Name">Shared</string></Properties><Item class="ModuleScript" referent="RBX00000002"><Properties><string name="Name">GameData</string><ProtectedString name="Source"><![CDATA[-- 빙의 대소동: 공용 데이터 (서버/클라이언트 둘 다 사용)
+local GameData = {}
+
+-- 원작 좌표(픽셀) -> 스터드 변환 비율
+GameData.K = 64 / 600
+
+---------------------------------------------------------------------
+-- 몸 종류
+-- Speed: 스터드/초, HP, Life: 빙의했을 때 버티는 시간(초)
+---------------------------------------------------------------------
+GameData.Bodies = {
+	ghost = { Name = "혼이", Speed = 22, HP = 3, R = 1.2, Ability = "도약" },
+	mouse = { Name = "쥐", Speed = 19, HP = 20, Life = 28, R = 0.9, Ability = "찍찍", Skill = { "땅굴", 5 } },
+	cat = { Name = "고양이", Speed = 23, HP = 40, Life = 32, R = 1.2, Ability = "덮치기", Skill = { "담 넘기", 6 } },
+	pigeon = { Name = "비둘기", Speed = 22, HP = 18, Life = 26, R = 1.1, Ability = "똥 폭격", Fly = true, Skill = { "급강하", 3 } },
+	citizen = { Name = "시민", Speed = 16, HP = 60, Life = 38, R = 1.4, Ability = "펀치", Human = true, Skill = { "비명", 6 } },
+	scientist = { Name = "과학자", Speed = 16, HP = 55, Life = 38, R = 1.4, Ability = "플라스크", Human = true, Key = "lab", Skill = { "투명 물약", 14 } },
+	police = { Name = "경찰", Speed = 17.5, HP = 90, Life = 42, R = 1.5, Ability = "권총", Hostile = true, Human = true, Skill = { "수갑", 4 } },
+	dog = { Name = "경찰견", Speed = 26, HP = 60, Life = 32, R = 1.3, Ability = "물기", Hostile = true, Skill = { "울부짖기", 8 } },
+	hazmat = { Name = "퇴마사", Speed = 16, HP = 110, Life = 42, R = 1.5, Ability = "성수 뿌리기", Hostile = true, Human = true, Skill = { "성수 폭탄", 8 } },
+	soldier = { Name = "군인", Speed = 18, HP = 130, Life = 48, R = 1.5, Ability = "소총", Hostile = true, Human = true, Key = "base", Skill = { "공습 요청", 18 } },
+	robot = { Name = "보안 로봇", Speed = 16, HP = 220, Life = 55, R = 1.9, Ability = "레이저", Hostile = true, Key = "lab", Skill = { "EMP", 12 } },
+	mutant = { Name = "실험체", Speed = 20, HP = 170, Life = 45, R = 1.6, Ability = "촉수 후려치기", Skill = { "분열", 15 } },
+	car = { Name = "자동차", Speed = 36, HP = 150, Life = 50, R = 3, Ability = "빵빵", Vehicle = true, Skill = { "니트로", 6 } },
+	pcar = { Name = "경찰차", Speed = 39, HP = 200, Life = 55, R = 3, Ability = "사이렌", Vehicle = true, Skill = { "니트로", 6 } },
+	tank = { Name = "탱크", Speed = 16, HP = 900, Life = 90, R = 4, Ability = "포격", Vehicle = true, Hostile = true, Skill = { "연막탄", 12 } },
+	exorcist = { Name = "대퇴마사", Speed = 15, HP = 1600, Life = 120, R = 2.2, Ability = "부적 난사", Hostile = true, Human = true, Boss = true, Skill = { "퇴마진", 10 } },
+}
+
+-- 이 구역에 있어도 의심받지 않는 몸
+GameData.Allow = {
+	lab = { scientist = true, robot = true, pigeon = true },
+	base = { soldier = true, tank = true, pigeon = true },
+}
+
+GameData.KillPoints = {
+	mutant = 40, mouse = 5, cat = 8, pigeon = 5, citizen = 10, scientist = 12, police = 20, dog = 15,
+	hazmat = 25, soldier = 30, robot = 45, car = 30, pcar = 40, tank = 120,
+}
+
+---------------------------------------------------------------------
+-- 경계 단계
+---------------------------------------------------------------------
+GameData.Stars = { 25, 70, 150, 280, 450 }
+GameData.StarSub = {
+	"경찰이 출동했다!",
+	"경찰견과 경찰차까지!",
+	"퇴마사가 온다! 영혼 상태 조심!",
+	"군대 투입!",
+	"로봇과 탱크까지!! 도시 비상사태!",
+}
+GameData.Responders = {
+	[0] = {},
+	{ { "police", 2 } },
+	{ { "police", 4 }, { "dog", 2 }, { "pcar", 1 } },
+	{ { "police", 4 }, { "dog", 2 }, { "pcar", 2 }, { "hazmat", 3 } },
+	{ { "police", 3 }, { "dog", 2 }, { "pcar", 2 }, { "hazmat", 3 }, { "soldier", 4 } },
+	{ { "police", 3 }, { "pcar", 2 }, { "hazmat", 4 }, { "soldier", 5 }, { "robot", 2 }, { "tank", 1 } },
+}
+
+function GameData.StarsFor(heat: number): number
+	local s = 0
+	for _, t in ipairs(GameData.Stars) do
+		if heat >= t then
+			s += 1
+		end
+	end
+	return s
+end
+
+---------------------------------------------------------------------
+-- 진화 (업그레이드)
+---------------------------------------------------------------------
+GameData.Upgrades = {
+	{ Id = "life", Name = "깊은 빙의", Desc = "빙의한 몸이 버티는 시간 +25%", Max = 5, Icon = "💫" },
+	{ Id = "dry", Name = "질긴 영혼", Desc = "영혼 상태 유지 시간 +2초", Max = 5, Icon = "🕯️" },
+	{ Id = "jump", Name = "영혼 가속", Desc = "순간이동·도약 거리 +20%", Max = 5, Icon = "💨" },
+	{ Id = "power", Name = "완전 장악", Desc = "빙의한 몸 공격력 +20%", Max = 5, Icon = "💪" },
+	{ Id = "sneak", Name = "투명 영혼", Desc = "경계 상승 -12%", Max = 5, Icon = "🥸" },
+	{ Id = "hp", Name = "영혼 보호막", Desc = "영혼 체력 +1", Max = 3, Icon = "🛡️" },
+	{ Id = "boom", Name = "폭발 빙의", Desc = "몸을 떠날 때 그 몸이 펑! 터져요", Max = 3, Icon = "💥" },
+	{ Id = "fear", Name = "공포의 강림", Desc = "빙의하는 순간 주변 사람이 기절해요", Max = 3, Icon = "😱" },
+	{ Id = "polter", Name = "폴터가이스트", Desc = "영혼 상태 능력: 주변을 전부 날려버려요", Max = 3, Icon = "🌀" },
+}
+
+function GameData.UpgradeCost(level: number): number
+	return math.floor(40 * 1.7 ^ level + 0.5)
+end
+
+function GameData.SoulRange(jumpLevel: number): number
+	return 35 * (1 + 0.2 * jumpLevel)
+end
+
+---------------------------------------------------------------------
+-- 미션 (순서대로 진행)
+---------------------------------------------------------------------
+GameData.Missions = {
+	{ Id = "infect_mouse", Text = "쥐한테 빙의하기", Reward = 20, Tip = "쥐 쪽을 보고 B(E키)를 누르면 순간이동 빙의!" },
+	{ Id = "cat_stall", Text = "고양이로 시장 가판대 털기", Reward = 30, Tip = "고양이 [덮치기]로 시장 가판대를 들이받아요." },
+	{ Id = "fridge", Text = "냉장고 털어서 몸 회복하기", Reward = 30, Tip = "집 안으로 들어가서 냉장고 앞에서 상호작용!" },
+	{ Id = "poop", Text = "비둘기 똥 5번 명중", N = 5, Reward = 40, Tip = "비둘기는 공원과 시장에 많아요." },
+	{ Id = "fountain", Text = "사람 몸으로 분수에 퐁당!", Reward = 40, Tip = "시민을 조종해서 공원 분수로 걸어 들어가요." },
+	{ Id = "infect_police", Text = "경찰 몸 빼앗기", Reward = 50, Tip = "경찰서 근처엔 냄새를 맡는 경찰견이 있어요!" },
+	{ Id = "ppc", Text = "경찰서 컴퓨터로 수배 기록 지우기", Reward = 60, Tip = "사람 몸으로 경찰서 안 컴퓨터를 써요. 경계가 0이 돼요!" },
+	{ Id = "stars2", Text = "경계 2단계 찍기", Reward = 50, Tip = "마구 깽판을 쳐요!" },
+	{ Id = "house", Text = "건물 한 채 무너뜨리기", Reward = 60, Tip = "자동차로 들이받거나 총으로 쏴요. 초록 통도 잘 터져요!" },
+	{ Id = "gate_lab", Text = "과학자로 연구소 문 열기", Reward = 80, Tip = "영혼은 벽을 통과해요! 담 안의 과학자에게 빙의해요." },
+	{ Id = "specimen", Text = "실험체 풀어주기", Reward = 90, Tip = "연구소 안 초록 수조를 깨요. 실험체는 아무나 공격해요!" },
+	{ Id = "infect_robot", Text = "보안 로봇 탈취하기", Reward = 100, Tip = "로봇은 연구소를 지켜요. 과학자 몸이면 의심받지 않아요." },
+	{ Id = "gate_base", Text = "군인으로 군사기지 문 열기", Reward = 120, Tip = "군사기지는 도시 구석! 담을 통과해서 군인을 노려요." },
+	{ Id = "infect_tank", Text = "탱크 탈취하기!", Reward = 200, Tip = "탱크에 영혼을 쏴서 빙의! 포격 조심." },
+	{ Id = "tank5", Text = "탱크로 건물 5채 부수기", N = 5, Reward = 250, Tip = "포격하거나 그냥 밀고 들어가요!" },
+	{ Id = "boss", Text = "대퇴마사 처치 또는 빙의", Reward = 400, Tip = "경계 5단계를 25초 넘게 버티면 등장! 약해지면 빙의할 수 있어요." },
+	{ Id = "s5", Text = "경계 5단계에서 60초 버티기", N = 60, Reward = 300, Tip = "도시 전체가 너를 쫓는다!" },
+}
+
+---------------------------------------------------------------------
+-- 도시
+---------------------------------------------------------------------
+GameData.BS = 64 -- 블록 간격 (스터드)
+GameData.RW = 16 -- 도로 폭
+GameData.NB = 9 -- 9x9 블록
+GameData.WS = GameData.BS * GameData.NB + GameData.RW
+GameData.DAYLEN = 300 -- 하루 길이(초)
+
+GameData.ZoneMap = {
+	{ "home", "home", "park", "home", "mart", "home", "lab", "lab", "home" },
+	{ "home", "school", "park", "cafe", "home", "police", "lab", "lab", "home" },
+	{ "market", "market", "park", "home", "home", "home", "home", "gas", "home" },
+	{ "home", "home", "home", "police", "hosp", "home", "park", "home", "home" },
+	{ "cafe", "home", "bank", "home", "park", "home", "home", "mart", "home" },
+	{ "home", "park", "home", "market", "home", "school", "home", "base", "base" },
+	{ "home", "park", "market", "home", "gas", "home", "home", "base", "base" },
+	{ "home", "home", "home", "home", "park", "cafe", "home", "home", "home" },
+	{ "mart", "home", "hosp", "home", "home", "home", "bank", "home", "park" },
+}
+
+GameData.ZoneKo = {
+	home = "주택가", park = "공원", market = "시장", police = "경찰서", lab = "연구소", base = "군사기지",
+	school = "학교", cafe = "카페 거리", mart = "마트", hosp = "병원", bank = "은행", gas = "주유소",
+}
+
+GameData.BuildingName = {
+	house = "주택", police = "경찰서", lab = "연구소", base = "군 병영", school = "학교",
+	cafe = "카페", mart = "마트", hosp = "병원", bank = "은행", gas = "주유소",
+}
+GameData.BuildingHP = { house = 320, police = 950, lab = 750, base = 750, school = 1200, cafe = 600, mart = 700, hosp = 1000, bank = 900, gas = 420 }
+GameData.BuildingPoints = { house = 50, police = 120, lab = 120, base = 100, school = 140, cafe = 70, mart = 90, hosp = 130, bank = 130, gas = 80 }
+
+return GameData
+]]></ProtectedString></Properties></Item>
+</Item>
+</Item>
+<Item class="ServerScriptService" referent="RBX0000000D"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Folder" referent="RBX0000000C"><Properties><string name="Name">Server</string></Properties><Item class="ModuleScript" referent="RBX00000005"><Properties><string name="Name">BodyFactory</string><ProtectedString name="Source"><![CDATA[-- 몸(캐릭터) 모델 생성. 전부 Humanoid + HumanoidRootPart 구조라서
+-- player.Character 로 바로 넣으면 플레이어가 조종할 수 있음 (= 빙의)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GD = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameData"))
+
+local BodyFactory = {}
+local rng = Random.new()
+
+local SKINS = { Color3.fromRGB(255, 220, 185), Color3.fromRGB(240, 195, 150), Color3.fromRGB(200, 150, 110), Color3.fromRGB(140, 100, 70) }
+local SHIRTS = { "#e85a5a", "#4f8fe0", "#f0b030", "#5cc05a", "#a070e0", "#f070b0", "#40c0b0", "#ff8a40" }
+local PANTS = { "#3b4a6b", "#4a3a2a", "#2a2a3a", "#5a5a6a", "#2f4f3f" }
+local HAIRS = { "#3a2a20", "#5b3a22", "#1e1e1e", "#c99a4c", "#8a4a2a", "#d9d0c4" }
+local CARS = { "#e04a4a", "#f0b030", "#3f7fe0", "#4cb86a", "#e8e8e8", "#9a60e0", "#ff8a40" }
+
+local function hex(s: string): Color3
+	return Color3.fromHex(s)
+end
+
+local function pick(list)
+	return list[rng:NextInteger(1, #list)]
+end
+
+local BLACK = Color3.fromRGB(25, 25, 30)
+local WHITE = Color3.fromRGB(240, 240, 240)
+
+-- root에 붙는 장식 파트
+local function adder(model: Model, root: BasePart)
+	return function(size: Vector3, offset: CFrame, color: Color3, material: Enum.Material?, name: string?, shape: Enum.PartType?)
+		local p = Instance.new("Part")
+		p.Name = name or "Part"
+		if shape then
+			p.Shape = shape
+		end
+		p.Size = size
+		p.CFrame = root.CFrame * offset
+		p.Color = color
+		p.Material = material or Enum.Material.SmoothPlastic
+		p.TopSurface = Enum.SurfaceType.Smooth
+		p.BottomSurface = Enum.SurfaceType.Smooth
+		p.CanCollide = false
+		p.CanTouch = false
+		p.Massless = true
+		p.Anchored = false
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = root
+		weld.Part1 = p
+		weld.Parent = p
+		p.Parent = model
+		return p
+	end
+end
+
+local function eyes(add, y: number, z: number, spread: number, size: number?)
+	local s = size or 1
+	for _, sx in ipairs({ -1, 1 }) do
+		add(Vector3.new(0.18 * s, 0.26 * s, 0.05), CFrame.new(sx * spread, y, z), BLACK)
+	end
+end
+
+local function human(add, s: number, o)
+	local skin = o.Skin or pick(SKINS)
+	-- 몸통
+	add(Vector3.new(2, 2, 1) * s, CFrame.new(), o.Shirt, o.ShirtMat)
+	-- 머리
+	add(Vector3.new(1.2, 1.2, 1.2) * s, CFrame.new(0, 1.65 * s, 0), skin, nil, "Head")
+	eyes(add, 1.75 * s, -0.61 * s, 0.28 * s, s)
+	if o.Hair then
+		add(Vector3.new(1.3, 0.4, 1.3) * s, CFrame.new(0, 2.35 * s, 0.05 * s), o.Hair)
+		if o.LongHair then
+			add(Vector3.new(1.3, 1.1, 0.3) * s, CFrame.new(0, 1.8 * s, 0.6 * s), o.Hair)
+		end
+	end
+	-- 팔, 다리
+	for _, sx in ipairs({ -1, 1 }) do
+		add(Vector3.new(0.7, o.ArmLen or 1.9, 0.8) * s, CFrame.new(sx * 1.35 * s, 0.05 * s - ((o.ArmLen or 1.9) - 1.9) / 2 * s, 0), o.Arm or o.Shirt, o.ShirtMat)
+		add(Vector3.new(0.9, 2, 0.95) * s, CFrame.new(sx * 0.5 * s, -2 * s, 0), o.Pants)
+	end
+	-- 모자류
+	if o.Hat == "police" then
+		add(Vector3.new(1.4, 0.4, 1.4) * s, CFrame.new(0, 2.4 * s, 0), hex("#23325a"))
+		add(Vector3.new(1.4, 0.12, 0.6) * s, CFrame.new(0, 2.22 * s, -0.8 * s), BLACK)
+		add(Vector3.new(0.3, 0.3, 0.05) * s, CFrame.new(0, 2.45 * s, -0.72 * s), hex("#ffd23a"), Enum.Material.Neon)
+	elseif o.Hat == "soldier" then
+		add(Vector3.new(1.5, 0.6, 1.5) * s, CFrame.new(0, 2.4 * s, 0), hex("#4f5a35"))
+	elseif o.Hat == "hazmat" then
+		add(Vector3.new(1.4, 1.4, 1.4) * s, CFrame.new(0, 1.7 * s, 0), hex("#f2d43a"), Enum.Material.Fabric)
+		add(Vector3.new(1, 0.5, 0.1) * s, CFrame.new(0, 1.8 * s, -0.71 * s), hex("#9fe0ff"), Enum.Material.Glass)
+	elseif o.Hat == "exorcist" then
+		add(Vector3.new(1.6, 0.25, 1.6) * s, CFrame.new(0, 2.35 * s, 0), BLACK)
+		add(Vector3.new(0.9, 0.9, 0.9) * s, CFrame.new(0, 2.8 * s, 0), BLACK)
+		add(Vector3.new(2.3, 2.6, 1.3) * s, CFrame.new(0, -1.5 * s, 0), hex("#6a3ab0"), Enum.Material.Fabric)
+		add(Vector3.new(0.5, 0.8, 0.05) * s, CFrame.new(0.5 * s, 0.2 * s, -0.53 * s), hex("#fff2a0"), Enum.Material.Neon)
+	elseif o.Hat == "robot" then
+		add(Vector3.new(1.1, 0.3, 0.1) * s, CFrame.new(0, 1.75 * s, -0.62 * s), hex("#ff3a3a"), Enum.Material.Neon)
+		add(Vector3.new(0.12, 0.8, 0.12) * s, CFrame.new(0, 2.6 * s, 0), Color3.fromRGB(120, 120, 130), Enum.Material.Metal)
+		add(Vector3.new(0.3, 0.3, 0.3) * s, CFrame.new(0, 3.05 * s, 0), hex("#ff3a3a"), Enum.Material.Neon, nil, Enum.PartType.Ball)
+	end
+	if o.Coat then
+		add(Vector3.new(2.1, 1.2, 1.1) * s, CFrame.new(0, -1.4 * s, 0), WHITE, Enum.Material.Fabric)
+	end
+	if o.Vest then
+		add(Vector3.new(2.05, 1.4, 1.05) * s, CFrame.new(0, 0.2 * s, 0), o.Vest, Enum.Material.Fabric)
+	end
+end
+
+-- 타입별 모양 정의: { RootSize, HipHeight, Build(add) }
+local SHAPES = {}
+
+SHAPES.ghost = {
+	Root = Vector3.new(2, 2, 2),
+	Hip = 1.6,
+	Build = function(add)
+		local lav = hex("#d9ccff")
+		add(Vector3.new(2.8, 2.8, 2.8), CFrame.new(0, 0.2, 0), lav, Enum.Material.SmoothPlastic, "Head", Enum.PartType.Ball).Transparency = 0.1
+		add(Vector3.new(0.35, 0.55, 0.1), CFrame.new(-0.45, 0.4, -1.32), BLACK)
+		add(Vector3.new(0.35, 0.55, 0.1), CFrame.new(0.45, 0.4, -1.32), BLACK)
+		add(Vector3.new(0.4, 0.2, 0.1), CFrame.new(-0.85, -0.05, -1.2), hex("#ff9ab8"))
+		add(Vector3.new(0.4, 0.2, 0.1), CFrame.new(0.85, -0.05, -1.2), hex("#ff9ab8"))
+		add(Vector3.one * 1.6, CFrame.new(0, -0.9, 1), lav, nil, nil, Enum.PartType.Ball).Transparency = 0.25
+		add(Vector3.one * 1, CFrame.new(0, -1.3, 1.8), lav, nil, nil, Enum.PartType.Ball).Transparency = 0.4
+	end,
+}
+
+local function humanShape(scale: number, opts: () -> any)
+	return {
+		Root = Vector3.new(2, 2, 1) * scale,
+		Hip = 2 * scale,
+		Build = function(add)
+			human(add, scale, opts())
+		end,
+	}
+end
+
+SHAPES.citizen = humanShape(1, function()
+	return { Shirt = hex(pick(SHIRTS)), Pants = hex(pick(PANTS)), Hair = hex(pick(HAIRS)), LongHair = rng:NextNumber() < 0.4 }
+end)
+SHAPES.scientist = humanShape(1, function()
+	return { Shirt = WHITE, Pants = hex("#4a5a7a"), Hair = hex(pick(HAIRS)), Coat = true }
+end)
+SHAPES.police = humanShape(1, function()
+	return { Shirt = hex("#3a5aa0"), Pants = hex("#23325a"), Hat = "police" }
+end)
+SHAPES.hazmat = humanShape(1, function()
+	return { Shirt = hex("#f2d43a"), Pants = hex("#e0c030"), Hat = "hazmat", ShirtMat = Enum.Material.Fabric }
+end)
+SHAPES.soldier = humanShape(1, function()
+	return { Shirt = hex("#6b7a45"), Pants = hex("#4f5a35"), Hat = "soldier", Vest = hex("#3f4a2a") }
+end)
+SHAPES.robot = humanShape(1.3, function()
+	return { Shirt = Color3.fromRGB(150, 155, 165), ShirtMat = Enum.Material.Metal, Pants = Color3.fromRGB(90, 95, 105), Skin = Color3.fromRGB(170, 175, 185), Hat = "robot" }
+end)
+SHAPES.mutant = humanShape(1.15, function()
+	return { Shirt = hex("#6fd06a"), Skin = hex("#8fe08a"), Pants = hex("#5a3a7a"), Arm = hex("#4fbf2e"), ArmLen = 2.8 }
+end)
+SHAPES.exorcist = humanShape(1.6, function()
+	return { Shirt = hex("#6a3ab0"), Pants = hex("#3a1a60"), Hat = "exorcist", Hair = hex("#d9d0c4") }
+end)
+
+SHAPES.mouse = {
+	Root = Vector3.new(1.2, 0.8, 2),
+	Hip = 0.2,
+	Build = function(add)
+		local c = Color3.fromRGB(150, 150, 155)
+		add(Vector3.new(1.2, 0.8, 2), CFrame.new(), c)
+		add(Vector3.new(0.9, 0.7, 0.8), CFrame.new(0, 0.1, -1.2), c, nil, "Head")
+		for _, sx in ipairs({ -1, 1 }) do
+			add(Vector3.new(0.5, 0.5, 0.15), CFrame.new(sx * 0.35, 0.6, -1.2), hex("#ff9ab8"))
+		end
+		eyes(add, 0.2, -1.62, 0.22, 0.7)
+		add(Vector3.new(0.15, 0.15, 1.6), CFrame.new(0, 0, 1.7), hex("#ff9ab8"))
+	end,
+}
+
+SHAPES.cat = {
+	Root = Vector3.new(1.2, 1.1, 2.6),
+	Hip = 1,
+	Build = function(add)
+		local c = pick({ hex("#f0a040"), hex("#9a9aa0"), hex("#3a3a40"), hex("#f4efe2") })
+		add(Vector3.new(1.2, 1.1, 2.6), CFrame.new(), c)
+		add(Vector3.new(1.3, 1.2, 1.2), CFrame.new(0, 0.7, -1.6), c, nil, "Head")
+		for _, sx in ipairs({ -1, 1 }) do
+			add(Vector3.new(0.4, 0.5, 0.2), CFrame.new(sx * 0.4, 1.45, -1.6), c)
+			for _, sz in ipairs({ -1, 1 }) do
+				add(Vector3.new(0.4, 1, 0.4), CFrame.new(sx * 0.4, -1.05, sz * 0.9), c)
+			end
+		end
+		eyes(add, 0.85, -2.22, 0.3, 0.9)
+		add(Vector3.new(0.3, 0.3, 1.8), CFrame.new(0, 0.9, 1.9) * CFrame.Angles(math.rad(35), 0, 0), c)
+	end,
+}
+
+SHAPES.pigeon = {
+	Root = Vector3.new(1, 1, 1.6),
+	Hip = 4.5,
+	Build = function(add)
+		local c = hex("#8a94a8")
+		add(Vector3.new(1, 1, 1.6), CFrame.new(), c)
+		add(Vector3.new(0.75, 0.75, 0.75), CFrame.new(0, 0.6, -0.9), hex("#6a7488"), nil, "Head")
+		add(Vector3.new(0.25, 0.2, 0.4), CFrame.new(0, 0.55, -1.4), hex("#f0b030"))
+		eyes(add, 0.75, -1.28, 0.2, 0.6)
+		for _, sx in ipairs({ -1, 1 }) do
+			add(Vector3.new(1.6, 0.15, 1), CFrame.new(sx * 1.1, 0.2, 0.1) * CFrame.Angles(0, 0, sx * math.rad(15)), c)
+		end
+	end,
+}
+
+SHAPES.dog = {
+	Root = Vector3.new(1.4, 1.4, 3),
+	Hip = 1.2,
+	Build = function(add)
+		local c = hex("#7a5232")
+		add(Vector3.new(1.4, 1.4, 3), CFrame.new(), c)
+		add(Vector3.new(1.45, 1, 1.6), CFrame.new(0, 0.1, -0.2), hex("#2a3a6a"), Enum.Material.Fabric)
+		add(Vector3.new(1.2, 1.2, 1.4), CFrame.new(0, 0.8, -1.9), c, nil, "Head")
+		add(Vector3.new(0.7, 0.6, 0.6), CFrame.new(0, 0.5, -2.7), hex("#5a3a22"))
+		for _, sx in ipairs({ -1, 1 }) do
+			add(Vector3.new(0.35, 0.7, 0.3), CFrame.new(sx * 0.55, 1.3, -1.7), hex("#3a2412"))
+			for _, sz in ipairs({ -1, 1 }) do
+				add(Vector3.new(0.45, 1.2, 0.45), CFrame.new(sx * 0.45, -1.2, sz * 1.1), c)
+			end
+		end
+		eyes(add, 1, -2.62, 0.3, 0.9)
+		add(Vector3.new(0.25, 0.25, 1.2), CFrame.new(0, 0.7, 1.9) * CFrame.Angles(math.rad(40), 0, 0), c)
+	end,
+}
+
+local function carShape(kind: string)
+	return {
+		Root = Vector3.new(5, 2, 9.5),
+		Hip = 1,
+		Build = function(add)
+			local body = if kind == "pcar" then WHITE else hex(pick(CARS))
+			add(Vector3.new(5, 2, 9.5), CFrame.new(), body, Enum.Material.SmoothPlastic)
+			add(Vector3.new(4.4, 1.6, 4.8), CFrame.new(0, 1.8, 0.6), Color3.fromRGB(40, 50, 70), Enum.Material.Glass, "Head")
+			add(Vector3.new(4.5, 0.3, 4.4), CFrame.new(0, 2.65, 0.6), body)
+			for _, sx in ipairs({ -1, 1 }) do
+				add(Vector3.new(1, 0.5, 0.1), CFrame.new(sx * 1.7, 0.2, -4.76), hex("#fff6c8"), Enum.Material.Neon)
+				add(Vector3.new(1, 0.5, 0.1), CFrame.new(sx * 1.7, 0.2, 4.76), hex("#e04040"), Enum.Material.Neon)
+				for _, sz in ipairs({ -1, 1 }) do
+					add(Vector3.new(0.9, 2, 2), CFrame.new(sx * 2.4, -0.9, sz * 3), BLACK, nil, nil, Enum.PartType.Cylinder)
+				end
+			end
+			if kind == "pcar" then
+				add(Vector3.new(5.05, 0.9, 4.2), CFrame.new(0, -0.3, 0.3), Color3.fromRGB(30, 30, 40))
+				add(Vector3.new(1.4, 0.4, 0.8), CFrame.new(-0.8, 3, 0.6), hex("#ff3a3a"), Enum.Material.Neon)
+				add(Vector3.new(1.4, 0.4, 0.8), CFrame.new(0.8, 3, 0.6), hex("#3a7aff"), Enum.Material.Neon)
+			end
+		end,
+	}
+end
+SHAPES.car = carShape("car")
+SHAPES.pcar = carShape("pcar")
+
+SHAPES.tank = {
+	Root = Vector3.new(7, 2.4, 10.5),
+	Hip = 0.8,
+	Build = function(add)
+		local olive = hex("#5f6b3a")
+		add(Vector3.new(7, 2.4, 10.5), CFrame.new(), olive, Enum.Material.Metal)
+		for _, sx in ipairs({ -1, 1 }) do
+			add(Vector3.new(1.6, 2.2, 11), CFrame.new(sx * 3.7, -0.5, 0), Color3.fromRGB(40, 40, 40), Enum.Material.Metal)
+		end
+		add(Vector3.new(4.6, 1.8, 4.6), CFrame.new(0, 2.1, 0.8), hex("#6f7b45"), Enum.Material.Metal, "Head")
+		add(Vector3.new(0.8, 0.8, 7), CFrame.new(0, 2.2, -4.2), hex("#4f5a2a"), Enum.Material.Metal)
+	end,
+}
+
+function BodyFactory.Make(bodyType: string, pos: Vector3, parent: Instance): Model
+	local shape = SHAPES[bodyType] or SHAPES.citizen
+	local def = GD.Bodies[bodyType]
+
+	local model = Instance.new("Model")
+	model.Name = bodyType
+
+	local root = Instance.new("Part")
+	root.Name = "HumanoidRootPart"
+	root.Size = shape.Root
+	root.Transparency = 1
+	root.CanCollide = true
+	root.TopSurface = Enum.SurfaceType.Smooth
+	root.BottomSurface = Enum.SurfaceType.Smooth
+	root.CollisionGroup = if bodyType == "ghost" then "Ghost" else "Bodies"
+	local y = 0.4 + shape.Hip + shape.Root.Y / 2 + 0.1
+	root.CFrame = CFrame.new(pos.X, y, pos.Z) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0)
+	root.Parent = model
+	model.PrimaryPart = root
+
+	shape.Build(adder(model, root))
+
+	if not model:FindFirstChild("Head") then
+		local head = adder(model, root)(Vector3.one * 0.5, CFrame.new(0, shape.Root.Y / 2, 0), Color3.new(), nil, "Head")
+		head.Transparency = 1
+	end
+
+	if bodyType == "ghost" then
+		for _, p in ipairs(model:GetDescendants()) do
+			if p:IsA("BasePart") then
+				p.CollisionGroup = "Ghost"
+			end
+		end
+		local light = Instance.new("PointLight")
+		light.Color = hex("#cfc0ff")
+		light.Range = 10
+		light.Brightness = 1
+		light.Parent = root
+	end
+
+	local hum = Instance.new("Humanoid")
+	hum.RigType = Enum.HumanoidRigType.R15
+	hum.HipHeight = shape.Hip
+	hum.WalkSpeed = def and def.Speed or 16
+	hum.UseJumpPower = true
+	hum.JumpPower = if def and (def.Vehicle or bodyType == "ghost") then 0 else 40
+	hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	hum.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+	hum.BreakJointsOnDeath = false
+	hum.RequiresNeck = false
+	hum.MaxSlopeAngle = 60
+	hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+	hum.Parent = model
+
+	model:SetAttribute("Type", bodyType)
+	model.Parent = parent
+	pcall(function()
+		root:SetNetworkOwner(nil)
+	end)
+	return model
+end
+
+return BodyFactory
+]]></ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000006"><Properties><string name="Name">Combat</string><ProtectedString name="Source"><![CDATA[-- 전투: 데미지, 죽음, 폭발, 근접/사격, 몸별 능력(A)과 고유 스킬, 들이받기
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
+
+local GD = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameData"))
+
+local Combat = {}
+local G
+local rng = Random.new()
+
+local YELLOW = Color3.fromRGB(255, 240, 150)
+local RED = Color3.fromRGB(255, 70, 70)
+local BLUE = Color3.fromRGB(140, 210, 255)
+local TAL = Color3.fromRGB(255, 220, 90)
+
+local losParams: RaycastParams
+
+local function now()
+	return os.clock()
+end
+
+local function flat(v: Vector3): Vector3
+	return Vector3.new(v.X, 0, v.Z)
+end
+
+local function pick(t)
+	return t[rng:NextInteger(1, #t)]
+end
+
+---------------------------------------------------------------------
+-- 시야
+---------------------------------------------------------------------
+function Combat.LineOfSight(a: Vector3, b: Vector3): boolean
+	local from = a + Vector3.new(0, 1.5, 0)
+	local to = b + Vector3.new(0, 1.5, 0)
+	local result = workspace:Raycast(from, to - from, losParams)
+	return result == nil
+end
+
+---------------------------------------------------------------------
+-- 데미지 / 죽음
+---------------------------------------------------------------------
+local function playerOf(ent)
+	return ent and ent.Possessor or nil
+end
+
+function Combat.Hurt(e, dmg: number, src, byPlayer: Player?)
+	if not e or e.Dead or e.Hidden then
+		return
+	end
+	if e.IsGhost then
+		if byPlayer == nil or byPlayer ~= e.Possessor then
+			G.Players.HurtGhost(e.Possessor)
+		end
+		return
+	end
+	if byPlayer then
+		dmg *= G.Players.PowerMul(byPlayer)
+	end
+	e.HP -= dmg
+	G.Fx.UpdateHealthBar(e)
+
+	if not e.Possessor then
+		if e.Def.Hostile then
+			if byPlayer then
+				e.ProvokedBy = byPlayer
+				e.ProvokedUntil = now() + 7
+			end
+		elseif not e.Def.Vehicle then
+			G.Ents.Panic(e, if src and src.Root then src.Root.Position else e.Root.Position, 4)
+			if rng:NextNumber() < 0.35 and now() > e.SayUntil then
+				G.Fx.Say(e, pick({ "으악!", "살려줘!", "뭐야?!", "아파!" }))
+			end
+		end
+		if byPlayer and dmg >= 5 then
+			G.Players.AddChaos(byPlayer, 2, e.Root.Position, false)
+		end
+	end
+	if dmg >= 4 and not e.Def.Vehicle then
+		G.World.Debris(e.Root.Position, 3, { if e.Type == "robot" then Color3.fromRGB(255, 216, 74) else Color3.fromRGB(255, 106, 106) }, 0.4, 15)
+	end
+	if e.HP <= 0 then
+		Combat.Kill(e, src, byPlayer)
+	end
+end
+
+function Combat.Kill(e, src, byPlayer: Player?)
+	if e.Dead or e.IsGhost then
+		return
+	end
+	local pos = e.Root.Position
+	local host = e.Possessor
+	if host then
+		G.Players.OnHostDied(host, e)
+	end
+	e.Dead = true
+	e.HP = 0
+	e.Model:SetAttribute("Dead", true)
+	e.RemoveAt = now() + (if e.Def.Vehicle then 12 elseif e.Def.Human then 16 else 6)
+
+	for _, gui in ipairs(e.Model:GetDescendants()) do
+		if gui:IsA("BillboardGui") then
+			gui.Enabled = false
+		end
+	end
+
+	pcall(function()
+		e.Hum:MoveTo(pos)
+		e.Root.Anchored = true
+		if e.Def.Vehicle then
+			for _, p in ipairs(e.Model:GetDescendants()) do
+				if p:IsA("BasePart") and p ~= e.Root then
+					p.Color = p.Color:Lerp(Color3.fromRGB(30, 28, 26), 0.75)
+				end
+			end
+		else
+			local yaw = select(2, e.Root.CFrame:ToOrientation())
+			e.Model:PivotTo(CFrame.new(pos.X, 0.4 + e.Root.Size.X / 2 + 0.2, pos.Z) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(0, 0, math.rad(90)))
+		end
+	end)
+
+	if e.Type == "exorcist" then
+		G.Players.BossDefeated(byPlayer)
+	end
+	if e.Def.Vehicle then
+		Combat.Explode(pos, if e.Type == "tank" then 12 else 9, if e.Type == "tank" then 110 else 65, byPlayer, e)
+	end
+	if byPlayer then
+		G.Players.AddChaos(byPlayer, GD.KillPoints[e.Type] or 10, pos)
+		G.Players.Event(byPlayer, { k = "kill", type = e.Type })
+	end
+	G.Ents.PanicNear(pos, 23, 5)
+end
+
+---------------------------------------------------------------------
+-- 폭발
+---------------------------------------------------------------------
+function Combat.Explode(pos: Vector3, radius: number, dmg: number, byPlayer: Player?, src)
+	G.Fx.Explosion(pos, radius)
+	G.Fx.Sound("boom", pos)
+	for _, e in ipairs(G.Ents.Near(pos, radius)) do
+		if e ~= src then
+			local d = (e.Root.Position - pos).Magnitude
+			local f = 1 - math.clamp(d / (radius + e.R), 0, 1) * 0.6
+			Combat.Hurt(e, dmg * f, src, byPlayer)
+			if not e.Dead and e.Type ~= "tank" and not e.Possessor and not e.IsGhost then
+				local dir = flat(e.Root.Position - pos)
+				if dir.Magnitude > 0.1 then
+					e.Root.AssemblyLinearVelocity = dir.Unit * 45 * f + Vector3.new(0, 20 * f, 0)
+				end
+				e.StunUntil = math.max(e.StunUntil, now() + 0.5)
+			end
+		end
+	end
+	for _, prop in ipairs(G.World.PropsNear(pos, radius)) do
+		G.World.DamageProp(prop, dmg, byPlayer)
+	end
+	G.World.HitBuildingsInRadius(pos, radius, dmg, byPlayer)
+	for key, gate in pairs(G.World.Gates) do
+		if not gate.Open and (gate.Pos - pos).Magnitude < radius + 6 then
+			G.World.OpenGate(key, byPlayer)
+		end
+	end
+	G.Ents.PanicNear(pos, 32, 5)
+end
+
+---------------------------------------------------------------------
+-- 조준 / 근접 / 사격
+---------------------------------------------------------------------
+local function lookOf(e): Vector3
+	local l = flat(e.Root.CFrame.LookVector)
+	return if l.Magnitude > 0.01 then l.Unit else Vector3.new(0, 0, -1)
+end
+
+local function canTarget(shooter, e): boolean
+	if e == shooter or e.Dead or e.Hidden then
+		return false
+	end
+	-- 자기 영혼은 조준 안 함
+	if e.IsGhost and shooter.Possessor and e.Possessor == shooter.Possessor then
+		return false
+	end
+	return true
+end
+
+function Combat.AimTarget(shooter, range: number)
+	local pos = shooter.Root.Position
+	local look = lookOf(shooter)
+	local best, bs = nil, math.huge
+	for _, e in ipairs(G.Ents.Near(pos, range)) do
+		if canTarget(shooter, e) and not e.IsGhost then
+			local to = flat(e.Root.Position - pos)
+			local d = to.Magnitude
+			if d > 0.1 then
+				local ang = math.acos(math.clamp(look:Dot(to.Unit), -1, 1))
+				if ang < 1.1 then
+					local score = d + ang * 15 - (if e.Def.Hostile then 6 else 0)
+					if score < bs then
+						best, bs = e, score
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function aimPoint(shooter, range: number): Vector3
+	local t = Combat.AimTarget(shooter, range)
+	if t then
+		return t.Root.Position
+	end
+	return shooter.Root.Position + lookOf(shooter) * range
+end
+
+function Combat.Melee(attacker, dmg: number, range: number, byPlayer: Player?): boolean
+	local pos = attacker.Root.Position
+	local look = lookOf(attacker)
+	local hit = false
+	for _, e in ipairs(G.Ents.Near(pos, attacker.R + range + 1)) do
+		if canTarget(attacker, e) and not e.Def.Fly and (not e.IsGhost or byPlayer == nil) then
+			local to = flat(e.Root.Position - pos)
+			local d = to.Magnitude
+			if d <= attacker.R + e.R + range then
+				local ok = d < attacker.R + e.R or (d > 0.1 and look:Dot(to.Unit) > math.cos(1.2))
+				if ok then
+					Combat.Hurt(e, dmg, attacker, byPlayer)
+					if not e.Dead and e.Type ~= "tank" and not e.Possessor and not e.IsGhost and d > 0.1 then
+						e.Root.AssemblyLinearVelocity = to.Unit * 28 + Vector3.new(0, 8, 0)
+						e.StunUntil = math.max(e.StunUntil, now() + 0.35)
+					end
+					hit = true
+				end
+			end
+		end
+	end
+	if not hit then
+		for _, prop in ipairs(G.World.PropsNear(pos + look * (attacker.R + range * 0.5), range)) do
+			G.World.DamageProp(prop, dmg, byPlayer)
+			hit = true
+			break
+		end
+	end
+	if not hit then
+		local result = workspace:Raycast(pos, look * (attacker.R + range), losParams)
+		if result then
+			local b = G.World.BuildingFromPart(result.Instance)
+			if b then
+				G.World.DamageBuilding(b, dmg * 0.7, byPlayer)
+				hit = true
+			end
+		end
+	end
+	G.World.Debris(pos + look * (attacker.R + 1), if hit then 4 else 1, { Color3.new(1, 1, 1) }, 0.3, 12)
+	return hit
+end
+
+local function shotParams(shooter)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local exclude = { shooter.Model, G.World.Folders.Effects }
+	-- 플레이어가 쏠 때는 자기 영혼/몸 제외
+	params.FilterDescendantsInstances = exclude
+	return params
+end
+
+function Combat.Shoot(shooter, aimAt: Vector3, opts, byPlayer: Player?)
+	local origin = shooter.Root.Position + Vector3.new(0, 1, 0) + lookOf(shooter) * shooter.R
+	local target = aimAt + Vector3.new(0, 0.5, 0)
+	local dir = target - origin
+	if dir.Magnitude < 0.1 then
+		dir = lookOf(shooter)
+	end
+	local spread = opts.Spread or 0
+	local yaw = rng:NextNumber(-spread, spread)
+	dir = (CFrame.Angles(0, yaw, 0) * dir.Unit) * (opts.Range or 40)
+	local result = workspace:Raycast(origin, dir, shotParams(shooter))
+	local hitPos = if result then result.Position else origin + dir
+	G.Fx.Tracer(origin, hitPos, opts.Color or YELLOW, opts.Width)
+	if result then
+		local e = G.Ents.FromPart(result.Instance)
+		if e then
+			if canTarget(shooter, e) then
+				Combat.Hurt(e, opts.Dmg, shooter, byPlayer)
+			end
+			return
+		end
+		local prop = G.World.PropFromPart(result.Instance)
+		if prop then
+			G.World.DamageProp(prop, opts.Dmg, byPlayer)
+			return
+		end
+		local b = G.World.BuildingFromPart(result.Instance)
+		if b then
+			G.World.DamageBuilding(b, opts.Dmg * 0.5, byPlayer)
+		end
+	end
+end
+
+-- 성수 뿌리기 (원뿔 범위)
+function Combat.Spray(shooter, dmg: number, range: number, byPlayer: Player?, aimAt: Vector3?)
+	local pos = shooter.Root.Position
+	local look = if aimAt and flat(aimAt - pos).Magnitude > 0.1 then flat(aimAt - pos).Unit else lookOf(shooter)
+	for _, e in ipairs(G.Ents.Near(pos, range)) do
+		if canTarget(shooter, e) then
+			local to = flat(e.Root.Position - pos)
+			if to.Magnitude < 0.1 or look:Dot(to.Unit) > math.cos(0.5) then
+				Combat.Hurt(e, dmg, shooter, byPlayer)
+			end
+		end
+	end
+	for _ = 1, 2 do
+		local a = rng:NextNumber(-0.35, 0.35)
+		G.Fx.Tracer(pos + Vector3.new(0, 1, 0), pos + Vector3.new(0, 0.5, 0) + (CFrame.Angles(0, a, 0) * look) * range, BLUE, 0.35)
+	end
+end
+
+function Combat.Scare(src, radius: number, chaosPer: number, byPlayer: Player?): number
+	local pos = src.Root.Position
+	local n = 0
+	for _, e in ipairs(G.Ents.Near(pos, radius)) do
+		if e ~= src and not e.Possessor and not e.Def.Hostile and not e.Def.Vehicle and not e.IsGhost then
+			if e.PanicUntil < now() and rng:NextNumber() < 0.3 then
+				G.Fx.Say(e, pick({ "꺄악!", "뭐야뭐야", "도망쳐!" }))
+			end
+			G.Ents.Panic(e, pos, 3.5)
+			n += 1
+		end
+	end
+	if byPlayer and chaosPer > 0 and n > 0 then
+		G.Players.AddChaos(byPlayer, math.min(8, n * chaosPer), pos)
+	end
+	return n
+end
+
+---------------------------------------------------------------------
+-- NPC 공격
+---------------------------------------------------------------------
+function Combat.NpcAttack(e, target)
+	local t = now()
+	local tpos = target.Root.Position
+	if e.Type == "police" then
+		e.Cd = t + 0.8
+		Combat.Shoot(e, tpos, { Dmg = 12, Range = 42, Spread = 0.08 })
+	elseif e.Type == "soldier" then
+		e.Cd = t + 0.35
+		Combat.Shoot(e, tpos, { Dmg = 10, Range = 44, Spread = 0.12 })
+	elseif e.Type == "robot" then
+		e.Cd = t + 0.6
+		Combat.Shoot(e, tpos, { Dmg = 18, Range = 42, Spread = 0.04, Color = RED, Width = 0.3 })
+	elseif e.Type == "hazmat" then
+		e.Cd = t + 0.25
+		Combat.Spray(e, 6, 13, nil, tpos)
+	elseif e.Type == "dog" then
+		e.Cd = t + 0.8
+		Combat.Melee(e, 14, 2.5, nil)
+		G.Fx.Say(e, "왈!")
+	elseif e.Type == "tank" then
+		e.Cd = t + 2.5
+		local from = e.Root.Position + Vector3.new(0, 3, 0)
+		G.Fx.Lob(from, tpos, Color3.fromRGB(60, 60, 60), 1, 0.45, function()
+			Combat.Explode(tpos, 9, 60, nil, e)
+		end)
+	elseif e.Type == "exorcist" then
+		e.Cd = t + 1.2
+		local look = flat(tpos - e.Root.Position)
+		for i = -2, 2 do
+			local dir = CFrame.Angles(0, i * 0.18, 0) * (if look.Magnitude > 0.1 then look.Unit else lookOf(e))
+			Combat.Shoot(e, e.Root.Position + dir * 38, { Dmg = 10, Range = 38, Color = TAL, Width = 0.4 })
+		end
+		if t > (e.ZoneCd or 0) then
+			e.ZoneCd = t + 8
+			Combat.Zone(e, tpos, 14, 40, nil)
+			G.Fx.Say(e, "급급여율령!")
+		end
+	end
+end
+
+-- 퇴마진: 1초 뒤 범위 피해
+function Combat.Zone(src, pos: Vector3, radius: number, dmg: number, byPlayer: Player?)
+	local ring = Instance.new("Part")
+	ring.Anchored = true
+	ring.CanCollide = false
+	ring.CanQuery = false
+	ring.CanTouch = false
+	ring.Shape = Enum.PartType.Cylinder
+	ring.Material = Enum.Material.Neon
+	ring.Color = Color3.fromRGB(255, 220, 90)
+	ring.Transparency = 0.6
+	ring.Size = Vector3.new(0.3, radius * 2, radius * 2)
+	ring.CFrame = CFrame.new(pos.X, 0.6, pos.Z) * CFrame.Angles(0, 0, math.rad(90))
+	ring.Parent = G.World.Folders.Effects
+	task.delay(1, function()
+		TweenService:Create(ring, TweenInfo.new(0.4), { Transparency = 1 }):Play()
+		Debris:AddItem(ring, 0.5)
+		for _, e in ipairs(G.Ents.Near(pos, radius)) do
+			if e ~= src and not (e.IsGhost and byPlayer and e.Possessor == byPlayer) then
+				Combat.Hurt(e, dmg, src, byPlayer)
+				if not e.Possessor and not e.IsGhost then
+					e.StunUntil = math.max(e.StunUntil, now() + 1)
+				end
+			end
+		end
+	end)
+end
+
+---------------------------------------------------------------------
+-- 플레이어 능력 (A)
+---------------------------------------------------------------------
+local ABILITY_CD = {
+	ghost = 0.45, mouse = 1.1, cat = 0.9, pigeon = 0.32, citizen = 0.4, scientist = 1.1, police = 0.28, dog = 0.45,
+	hazmat = 0.1, soldier = 0.12, robot = 0.16, mutant = 0.6, car = 1, pcar = 1, tank = 0.85, exorcist = 0.5,
+}
+
+function Combat.PlayerAbility(ps)
+	local pe = ps.Body
+	local t = now()
+	if not pe or not G.Ents.Active(pe) or t < ps.AbilityReady then
+		return
+	end
+	local player = ps.Player
+	local bt = pe.Type
+	ps.AbilityReady = t + (ABILITY_CD[bt] or 0.5)
+
+	if bt == "ghost" then
+		local lv = ps.Upg.polter
+		if lv > 0 then
+			ps.AbilityReady = t + 2.4
+			local r = 9.6 + 3.2 * lv
+			G.Fx.Explosion(pe.Root.Position, r * 0.5)
+			for _, e in ipairs(G.Ents.Near(pe.Root.Position, r)) do
+				if e ~= pe and not e.IsGhost then
+					local dir = flat(e.Root.Position - pe.Root.Position)
+					if e.Type ~= "tank" and not e.Possessor and dir.Magnitude > 0.1 then
+						e.Root.AssemblyLinearVelocity = dir.Unit * 48 + Vector3.new(0, 15, 0)
+						e.StunUntil = math.max(e.StunUntil, t + 0.8)
+					end
+					Combat.Hurt(e, 5 * lv, pe, player)
+				end
+			end
+			for _, prop in ipairs(G.World.PropsNear(pe.Root.Position, r)) do
+				G.World.DamageProp(prop, 15 * lv, player)
+			end
+		else
+			G.Players.Leap(ps)
+		end
+	elseif bt == "mutant" then
+		Combat.Melee(pe, 32, 3.2, player)
+		G.Fx.Say(pe, pick({ "끼에엑!", "크르르", "꾸웩!" }))
+	elseif bt == "mouse" then
+		G.Fx.Say(pe, "찍찍!")
+		Combat.Scare(pe, 18, 1.5, player)
+		Combat.Melee(pe, 6, 1, player)
+	elseif bt == "cat" then
+		G.Fx.Say(pe, "냐앙!")
+		G.Players.Dash(ps, 60, 0.25, 26)
+	elseif bt == "pigeon" then
+		Combat.Poop(ps)
+	elseif bt == "citizen" then
+		Combat.Melee(pe, 16, 2.6, player)
+	elseif bt == "scientist" then
+		local to = aimPoint(pe, 28)
+		G.Fx.Say(pe, "실험 시작!")
+		G.Fx.Lob(pe.Root.Position + Vector3.new(0, 2, 0), to, Color3.fromRGB(120, 255, 120), 0.8, 0.5, function()
+			Combat.Explode(to, 6, 30, player, pe)
+		end)
+	elseif bt == "police" then
+		Combat.Shoot(pe, aimPoint(pe, 38), { Dmg = 20, Range = 40, Spread = 0.05 }, player)
+	elseif bt == "dog" then
+		Combat.Melee(pe, 26, 2.3, player)
+		G.Fx.Say(pe, "왈!")
+	elseif bt == "hazmat" then
+		Combat.Spray(pe, 8, 15, player, aimPoint(pe, 15))
+	elseif bt == "soldier" then
+		Combat.Shoot(pe, aimPoint(pe, 40), { Dmg = 15, Range = 42, Spread = 0.12 }, player)
+	elseif bt == "robot" then
+		Combat.Shoot(pe, aimPoint(pe, 40), { Dmg = 22, Range = 42, Spread = 0.03, Color = RED, Width = 0.3 }, player)
+	elseif bt == "car" or bt == "pcar" then
+		G.Fx.Say(pe, if bt == "car" then "빵빵!" else "삐뽀삐뽀!")
+		Combat.Scare(pe, 24, 1, player)
+	elseif bt == "exorcist" then
+		local base = flat(aimPoint(pe, 38) - pe.Root.Position)
+		base = if base.Magnitude > 0.1 then base.Unit else lookOf(pe)
+		for i = -2, 2 do
+			local dir = CFrame.Angles(0, i * 0.18, 0) * base
+			Combat.Shoot(pe, pe.Root.Position + dir * 38, { Dmg = 16, Range = 38, Color = TAL, Width = 0.4 }, player)
+		end
+	elseif bt == "tank" then
+		local to = aimPoint(pe, 49)
+		G.Fx.Lob(pe.Root.Position + Vector3.new(0, 3, 0), to, Color3.fromRGB(60, 60, 60), 1, 0.4, function()
+			Combat.Explode(to, 9, 90, player, pe)
+		end)
+	end
+end
+
+function Combat.Poop(ps)
+	local pe = ps.Body
+	local player = ps.Player
+	local from = pe.Root.Position - Vector3.new(0, 1, 0)
+	local ground = Vector3.new(from.X, 0.6, from.Z) + flat(pe.Root.AssemblyLinearVelocity) * 0.25
+	G.Fx.Lob(from, ground, Color3.fromRGB(250, 250, 245), 0.5, 0.3, function()
+		for _, e in ipairs(G.Ents.Near(ground, 2.5)) do
+			if e ~= pe and not e.IsGhost and not e.Def.Fly and not e.Def.Vehicle then
+				Combat.Hurt(e, 3, pe, player)
+				G.Fx.Say(e, pick({ "으악 똥!", "내 머리!", "비둘기 이 녀석!" }))
+				G.Players.AddChaos(player, 3, ground)
+				G.Players.Event(player, { k = "poophit" })
+				break
+			end
+		end
+	end)
+end
+
+---------------------------------------------------------------------
+-- 고유 스킬 (Q)
+---------------------------------------------------------------------
+local function freeSpot(pos: Vector3, size: Vector3): boolean
+	local params = OverlapParams.new()
+	params.FilterType = Enum.OverlapFilterType.Include
+	params.FilterDescendantsInstances = { workspace.City.Buildings, workspace.City.Compounds }
+	local parts = workspace:GetPartBoundsInBox(CFrame.new(pos), size, params)
+	return #parts == 0
+end
+
+local SKILLS = {}
+
+SKILLS.citizen = function(ps, h)
+	G.Fx.Say(h, "꺄아아악!!")
+	Combat.Scare(h, 34, 1.2, ps.Player)
+	for _, o in ipairs(G.Ents.Near(h.Root.Position, 75, function(o)
+		return o.Type == "police" and not o.Possessor and not o.Aware
+	end)) do
+		o.Home = h.Root.Position
+		o.NextWander = 0
+	end
+end
+
+SKILLS.police = function(ps, h)
+	local t = Combat.AimTarget(h, 23)
+	if t then
+		t.StunUntil = now() + 5
+		G.Fx.Say(t, "으앗! 수갑?!")
+		G.Players.AddChaos(ps.Player, 3, t.Root.Position)
+	else
+		G.Fx.Say(h, "아무도 없네")
+	end
+end
+
+SKILLS.scientist = function(ps, h)
+	G.Players.SetInvisible(ps, 8)
+	ps.Heat *= 0.7
+	for _, e in ipairs(G.Ents.List) do
+		e.Aware = false
+	end
+	G.Fx.Say(h, "짜잔~ 투명!")
+end
+
+SKILLS.soldier = function(ps, h)
+	local center = h.Root.Position + lookOf(h) * 20
+	G.Fx.Say(h, "공습 요청! 좌표 전송!")
+	for i = 0, 5 do
+		local p = center + Vector3.new(rng:NextNumber(-12, 12), 0, rng:NextNumber(-12, 12))
+		task.delay(1.6 + i * 0.25, function()
+			Combat.Explode(p, 10, 80, ps.Player, nil)
+		end)
+	end
+end
+
+SKILLS.hazmat = function(ps, h)
+	G.Fx.Say(h, "퇴마!")
+	for _, e in ipairs(G.Ents.Near(h.Root.Position, 14)) do
+		if canTarget(h, e) then
+			Combat.Hurt(e, 16, h, ps.Player)
+		end
+	end
+	for i = 0, 11 do
+		local dir = CFrame.Angles(0, i / 12 * math.pi * 2, 0) * Vector3.new(0, 0, -1)
+		G.Fx.Tracer(h.Root.Position + Vector3.new(0, 1, 0), h.Root.Position + dir * 14, BLUE, 0.35)
+	end
+end
+
+SKILLS.robot = function(ps, h)
+	G.Fx.Explosion(h.Root.Position, 4)
+	for _, o in ipairs(G.Ents.Near(h.Root.Position, 30)) do
+		if o ~= h and (o.Def.Vehicle or o.Type == "robot") and not o.Possessor then
+			o.StunUntil = now() + 4
+		end
+	end
+	for _, prop in ipairs(G.World.PropsNear(h.Root.Position, 30)) do
+		if prop.Kind == "lamp" then
+			G.World.BreakProp(prop, ps.Player)
+		end
+	end
+	G.Players.AddChaos(ps.Player, 10, h.Root.Position)
+end
+
+SKILLS.cat = function(ps, h)
+	G.Fx.Say(h, "냥!")
+	G.Players.WallPass(ps, 3.5)
+end
+
+SKILLS.dog = function(ps, h)
+	G.Fx.Say(h, "아우우우~!")
+	for _, o in ipairs(G.Ents.Near(h.Root.Position, 64)) do
+		if o ~= h and not o.Possessor then
+			if o.Type == "dog" then
+				o.FollowUntil = now() + 18
+				o.FollowPlayer = ps.Player
+				o.ProvokedUntil = 0
+				o.Aware = false
+				o.Responder = nil
+				o.AI = "wander"
+				o.Def = setmetatable({ Hostile = false }, { __index = GD.Bodies.dog })
+			elseif not o.Def.Hostile and not o.Def.Vehicle and (o.Root.Position - h.Root.Position).Magnitude < 21 then
+				o.StunUntil = now() + 1.5
+			end
+		end
+	end
+end
+
+SKILLS.mouse = function(ps, h)
+	local look = lookOf(h)
+	for d = 17, 4, -1 do
+		local p = h.Root.Position + look * d
+		if freeSpot(p, Vector3.new(1.5, 2, 2)) then
+			G.World.Debris(h.Root.Position, 6, { Color3.fromRGB(138, 106, 74) }, 0.5, 12)
+			h.Model:PivotTo(CFrame.lookAt(p, p + look))
+			G.World.Debris(p, 6, { Color3.fromRGB(138, 106, 74) }, 0.5, 12)
+			G.Fx.Say(h, "뿅!")
+			break
+		end
+	end
+end
+
+SKILLS.pigeon = function(ps, h)
+	local t = Combat.AimTarget(h, 18)
+	if t then
+		Combat.Hurt(t, 20, h, ps.Player)
+		if not t.Possessor then
+			t.StunUntil = now() + 1
+		end
+		G.Fx.Say(t, "아악 내 머리!")
+	end
+end
+
+SKILLS.car = function(ps, h)
+	G.Players.Nitro(ps, 2.5)
+end
+SKILLS.pcar = SKILLS.car
+
+SKILLS.tank = function(ps, h)
+	ps.Heat *= 0.7
+	for _, e in ipairs(G.Ents.Near(h.Root.Position, 48)) do
+		e.Aware = false
+	end
+	local smoke = Instance.new("Part")
+	smoke.Anchored = true
+	smoke.CanCollide = false
+	smoke.CanQuery = false
+	smoke.Transparency = 1
+	smoke.Size = Vector3.new(26, 1, 26)
+	smoke.CFrame = CFrame.new(h.Root.Position)
+	smoke.Parent = G.World.Folders.Effects
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Color = ColorSequence.new(Color3.fromRGB(200, 200, 200))
+	emitter.Size = NumberSequence.new(4, 8)
+	emitter.Transparency = NumberSequence.new(0.3, 1)
+	emitter.Lifetime = NumberRange.new(2, 3)
+	emitter.Rate = 40
+	emitter.Speed = NumberRange.new(2, 4)
+	emitter.Parent = smoke
+	task.delay(5, function()
+		emitter.Enabled = false
+	end)
+	Debris:AddItem(smoke, 8)
+end
+
+SKILLS.mutant = function(ps, h)
+	local m = G.Ents.Spawn("mutant", h.Root.Position + lookOf(h) * 4)
+	m.HP = 70
+	G.Fx.Say(m, "끼엑?")
+end
+
+SKILLS.exorcist = function(ps, h)
+	Combat.Zone(h, h.Root.Position, 16, 60, ps.Player)
+	G.Fx.Say(h, "급급여율령!")
+end
+
+function Combat.PlayerSkill(ps)
+	local h = ps.Host
+	local t = now()
+	if not h or not G.Ents.Active(h) or t < ps.SkillReady then
+		return
+	end
+	local sk = h.Def.Skill
+	local fn = SKILLS[h.Type]
+	if not sk or not fn then
+		return
+	end
+	ps.SkillReady = t + sk[2]
+	ps.Player:SetAttribute("SkillReadyAt", workspace:GetServerTimeNow() + sk[2])
+	fn(ps, h)
+end
+
+---------------------------------------------------------------------
+-- 소품 / 건물 파괴 결과
+---------------------------------------------------------------------
+function Combat.OnPropBroken(prop, byPlayer: Player?)
+	local pos = prop.Pos
+	local k = prop.Kind
+	local W = G.World
+	local function chaos(n)
+		if byPlayer then
+			G.Players.AddChaos(byPlayer, n, pos)
+		end
+	end
+	if k == "stall" then
+		W.Debris(pos + Vector3.new(0, 2, 0), 12, { Color3.fromRGB(143, 208, 255), Color3.fromRGB(255, 176, 74), Color3.fromRGB(224, 224, 224) }, 0.7, 25)
+		chaos(15)
+	elseif k == "bin" then
+		W.Debris(pos + Vector3.new(0, 1, 0), 8, { Color3.fromRGB(79, 138, 58), Color3.fromRGB(201, 180, 138) }, 0.6, 20)
+		chaos(5)
+		if rng:NextNumber() < 0.5 then
+			G.Ents.Spawn("mouse", pos + Vector3.new(2, 0, 2))
+		end
+	elseif k == "hydrant" then
+		W.Debris(pos + Vector3.new(0, 1, 0), 14, { Color3.fromRGB(143, 216, 255), Color3.new(1, 1, 1) }, 0.6, 30)
+		chaos(10)
+	elseif k == "barrel" then
+		Combat.Explode(pos, 10, 85, byPlayer, nil)
+		chaos(15)
+	elseif k == "pump" then
+		Combat.Explode(pos, 16, 120, byPlayer, nil)
+		chaos(30)
+	elseif k == "crate" then
+		Combat.Explode(pos, 8.5, 70, byPlayer, nil)
+	elseif k == "statue" then
+		W.Debris(pos + Vector3.new(0, 3, 0), 16, { Color3.fromRGB(168, 172, 180), Color3.fromRGB(200, 204, 212) }, 1, 25)
+		chaos(20)
+		if byPlayer then
+			G.Players.Toast(byPlayer, "📰 공원 동상 쓰러져… 시민들 \"저절로 넘어졌다\"")
+		end
+	elseif k == "specimen" then
+		W.Debris(pos + Vector3.new(0, 3, 0), 16, { Color3.fromRGB(143, 224, 208), Color3.fromRGB(79, 191, 46) }, 0.7, 25)
+		local m = G.Ents.Spawn("mutant", pos + Vector3.new(0, 0, 4))
+		m.StunUntil = now() + 0.5
+		G.Fx.Say(m, "끼에에엑!!")
+		chaos(25)
+		G.Players.Broadcast("Toast", "📰 연구소에서 정체불명 생명체 탈출!")
+		if byPlayer then
+			G.Players.Event(byPlayer, { k = "ia", kind = "specimen" })
+		end
+	elseif k == "tv" or k == "pc" or k == "ppc" or k == "atm" or k == "vending" then
+		W.Debris(pos + Vector3.new(0, 2, 0), 10, { Color3.fromRGB(255, 246, 160), Color3.fromRGB(90, 240, 255) }, 0.4, 25)
+		chaos(6)
+	else
+		W.Debris(pos + Vector3.new(0, 1, 0), 8, { Color3.fromRGB(168, 120, 74), Color3.fromRGB(216, 200, 168) }, 0.6, 20)
+		chaos(3)
+	end
+	if byPlayer then
+		G.Players.Event(byPlayer, { k = "break", kind = k })
+	end
+end
+
+function Combat.OnBuildingDestroyed(b, byPlayer: Player?)
+	local center = b.CFrame.Position
+	local name = GD.BuildingName[b.Kind] or "건물"
+	if byPlayer then
+		G.Players.AddChaos(byPlayer, GD.BuildingPoints[b.Kind] or 50, center)
+		G.Players.Event(byPlayer, { k = "house", kind = b.Kind })
+		G.Players.Pop(byPlayer, center + Vector3.new(0, b.Size.Y, 0), "와르르!!", Color3.fromRGB(255, 176, 74))
+		G.Players.Broadcast("Toast", pick({ "📰 " .. name .. " 붕괴! 원인 불명의 괴현상", "📰 " .. name .. " 와르르… 목격자 \"유령을 봤다\"", "📰 또 무너졌다! 이번엔 " .. name }))
+	end
+	local t = if b.Kind == "police" then "police" elseif b.Kind == "lab" then "scientist" elseif b.Kind == "base" then "soldier" else "citizen"
+	local n = if b.Kind == "house" then rng:NextInteger(1, 2) else rng:NextInteger(2, 3)
+	for _ = 1, n do
+		local p = center + Vector3.new(rng:NextNumber(-b.Size.X * 0.3, b.Size.X * 0.3), 2, rng:NextNumber(-b.Size.Z * 0.3, b.Size.Z * 0.3))
+		local e = G.Ents.Spawn(t, p)
+		e.PanicUntil = now() + 6
+		e.PanicFrom = center
+		e.StunUntil = now() + 0.4
+		G.Fx.Say(e, pick(if b.Kind == "house" then { "우리 집!!", "내 집이…!", "으아악!" } else { "건물이…!", "콜록콜록", "대피해!" }))
+		if e.Def.Hostile and byPlayer then
+			e.ProvokedBy = byPlayer
+			e.ProvokedUntil = now() + 5
+		end
+	end
+	G.Ents.PanicNear(center, 34, 5)
+end
+
+---------------------------------------------------------------------
+-- 들이받기 (차량) / 덮치기 (고양이)
+---------------------------------------------------------------------
+local function ramTick(vehicle, byPlayer: Player?)
+	local root = vehicle.Root
+	local vel = flat(root.AssemblyLinearVelocity)
+	local speed = vel.Magnitude
+	if speed < 12 then
+		return
+	end
+	local t = now()
+	local look = lookOf(vehicle)
+	local front = root.Position + look * vehicle.R * 0.8
+	local spx = speed / GD.K
+	local isTank = vehicle.Type == "tank"
+	for _, o in ipairs(G.Ents.Near(front, vehicle.R * 0.8)) do
+		if o ~= vehicle and not o.IsGhost and t >= (o.RamCd or 0) and not o.Def.Fly then
+			o.RamCd = t + 0.45
+			Combat.Hurt(o, (spx - 80) * (if isTank then 0.25 else 0.13), vehicle, byPlayer)
+			if not o.Dead and o.Type ~= "tank" and not o.Possessor then
+				local dir = flat(o.Root.Position - root.Position)
+				dir = if dir.Magnitude > 0.1 then dir.Unit else look
+				o.Root.AssemblyLinearVelocity = dir * speed * 0.9 + Vector3.new(0, 12, 0)
+				o.StunUntil = math.max(o.StunUntil, t + 0.6)
+			end
+		end
+	end
+	for _, prop in ipairs(G.World.PropsNear(front, vehicle.R * 0.6)) do
+		G.World.DamageProp(prop, 999, byPlayer)
+	end
+	if t >= (vehicle.WallRamCd or 0) then
+		local result = workspace:Raycast(root.Position, look * (vehicle.R + 2), losParams)
+		if result then
+			local b = G.World.BuildingFromPart(result.Instance)
+			if b then
+				vehicle.WallRamCd = t + 0.4
+				G.World.DamageBuilding(b, spx * 0.4 * (if isTank then 2 else 1), byPlayer)
+				G.World.Debris(result.Position, 5, { b.WallColor }, 1, 20)
+			end
+			for key, gate in pairs(G.World.Gates) do
+				if result.Instance == gate.Part and speed > 20 then
+					G.World.OpenGate(key, byPlayer)
+				end
+			end
+		end
+	end
+end
+
+function Combat.DashTick(ps)
+	local pe = ps.Body
+	if not pe or not G.Ents.Active(pe) then
+		return
+	end
+	ps.DashHit = ps.DashHit or {}
+	for _, o in ipairs(G.Ents.Near(pe.Root.Position, pe.R + 1.5)) do
+		if o ~= pe and not o.IsGhost and not o.Def.Fly and not ps.DashHit[o] then
+			ps.DashHit[o] = true
+			Combat.Hurt(o, ps.DashDmg or 26, pe, ps.Player)
+			if not o.Dead and o.Type ~= "tank" and not o.Possessor then
+				local dir = flat(o.Root.Position - pe.Root.Position)
+				if dir.Magnitude > 0.1 then
+					o.Root.AssemblyLinearVelocity = dir.Unit * 32 + Vector3.new(0, 10, 0)
+				end
+				o.StunUntil = math.max(o.StunUntil, now() + 0.6)
+			end
+		end
+	end
+	for _, prop in ipairs(G.World.PropsNear(pe.Root.Position, pe.R + 1)) do
+		G.World.DamageProp(prop, 50, ps.Player)
+	end
+end
+
+function Combat.Init(g)
+	G = g
+	losParams = RaycastParams.new()
+	losParams.FilterType = Enum.RaycastFilterType.Include
+	losParams.FilterDescendantsInstances = { workspace:WaitForChild("City"):WaitForChild("Buildings"), workspace.City:WaitForChild("Compounds") }
+
+	-- 차량 들이받기 루프
+	task.spawn(function()
+		while true do
+			task.wait(0.1)
+			for _, e in ipairs(G.Ents.List) do
+				if e.Def.Vehicle and not e.Dead and (e.Possessor or e.Chasing) then
+					local ok, err = pcall(ramTick, e, e.Possessor)
+					if not ok then
+						warn("[Ram]", err)
+					end
+				end
+			end
+		end
+	end)
+end
+
+return Combat
+]]></ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000007"><Properties><string name="Name">Entities</string><ProtectedString name="Source"><![CDATA[-- 몸 목록 관리 + NPC 인공지능 + 인구 관리 + 출동(경찰 등)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GD = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameData"))
+
+local Ents = {}
+local G
+local rng = Random.new()
+
+local list = {}
+local byModel = {}
+Ents.List = list
+local nextId = 0
+
+local CITYZ = { "home", "park", "market", "police", "school", "cafe", "mart", "hosp", "bank", "gas" }
+
+-- 원작 인구의 약 40% (로블록스 서버 성능 고려)
+local POP = {
+	{ Type = "citizen", N = 60, Spot = function() return G.World.ZoneSpot(CITYZ, true) end },
+	{ Type = "mouse", N = 16, Spot = function() return G.World.ZoneSpot({ "home", "market", "park" }) end },
+	{ Type = "cat", N = 10, Spot = function() return G.World.ZoneSpot({ "home", "market", "cafe" }) end },
+	{ Type = "pigeon", N = 14, Spot = function() return G.World.ZoneSpot({ "park", "market", "school" }) end },
+	{ Type = "police", N = 8, Cd = 12, Spot = function() return G.World.ZoneSpot({ "police" }, true) end },
+	{ Type = "dog", N = 4, Cd = 15, Spot = function() return G.World.ZoneSpot({ "police" }) end },
+	{ Type = "scientist", N = 6, Cd = 10, Spot = function() return G.World.ZoneSpot({ "lab" }, true) end },
+	{ Type = "robot", N = 3, Cd = 25, Spot = function() return G.World.ZoneSpot({ "lab" }) end },
+	{ Type = "soldier", N = 8, Cd = 10, Spot = function() return G.World.ZoneSpot({ "base" }, true) end },
+	{ Type = "tank", N = 2, Cd = 40, Spot = function() return G.World.ZoneSpot({ "base" }) end, AI = "parked" },
+	{ Type = "car", N = 16, Car = true },
+	{ Type = "pcar", N = 3, Cd = 30, Spot = function() return G.World.ZoneSpot({ "police" }) end, AI = "parked" },
+}
+
+-- 적대 NPC 거리 설정 (스터드)
+local PREF = { police = 23, soldier = 26, robot = 24, hazmat = 7, dog = 0, tank = 32, exorcist = 20 }
+local RANGE = { police = 38, soldier = 41, robot = 39, hazmat = 13, dog = 4.5, tank = 50, exorcist = 38 }
+local AWARE = { tank = 40 }
+
+---------------------------------------------------------------------
+-- 등록 / 조회
+---------------------------------------------------------------------
+function Ents.Spawn(bodyType: string, pos: Vector3, opts: { [string]: any }?)
+	local def = GD.Bodies[bodyType]
+	local model = G.Factory.Make(bodyType, pos, G.World.Folders.Bodies)
+	nextId += 1
+	local e = {
+		Id = nextId,
+		Type = bodyType,
+		Def = def,
+		Model = model,
+		Root = model.PrimaryPart,
+		Hum = model:FindFirstChildOfClass("Humanoid"),
+		HP = def.HP,
+		MaxHP = def.HP,
+		R = def.R,
+		Dead = false,
+		Home = pos,
+		AI = "wander",
+		NextWander = 0,
+		Cd = 0,
+		StunUntil = 0,
+		PanicUntil = 0,
+		PanicFrom = pos,
+		ProvokedBy = nil,
+		ProvokedUntil = 0,
+		Aware = false,
+		SniffCd = 0,
+		FollowUntil = 0,
+		SayUntil = 0,
+	}
+	if opts then
+		for k, v in pairs(opts) do
+			e[k] = v
+		end
+	end
+	model:SetAttribute("Possessable", not def.Boss)
+	table.insert(list, e)
+	byModel[model] = e
+	return e
+end
+
+function Ents.Remove(e)
+	byModel[e.Model] = nil
+	local idx = table.find(list, e)
+	if idx then
+		table.remove(list, idx)
+	end
+	if e.Model then
+		e.Model:Destroy()
+	end
+end
+
+function Ents.FromModel(model: Instance?)
+	return model and byModel[model] or nil
+end
+
+function Ents.FromPart(inst: Instance?)
+	while inst and inst ~= workspace do
+		if byModel[inst] then
+			return byModel[inst]
+		end
+		inst = inst.Parent
+	end
+	return nil
+end
+
+function Ents.Pos(e): Vector3
+	return e.Root.Position
+end
+
+-- 살아있고 보이는 몸만 (영혼 숨김/죽음 제외)
+function Ents.Active(e): boolean
+	return not e.Dead and not e.Hidden and e.Model.Parent ~= nil
+end
+
+function Ents.Near(pos: Vector3, radius: number, filter: ((any) -> boolean)?)
+	local out = {}
+	for _, e in ipairs(list) do
+		if Ents.Active(e) then
+			local d = (e.Root.Position - pos).Magnitude
+			if d < radius + e.R and (not filter or filter(e)) then
+				table.insert(out, e)
+			end
+		end
+	end
+	return out
+end
+
+function Ents.Nearest(pos: Vector3, bodyType: string, exclude)
+	local best, bd = nil, math.huge
+	for _, e in ipairs(list) do
+		if e.Type == bodyType and Ents.Active(e) and e ~= exclude and not e.Possessor then
+			local d = (e.Root.Position - pos).Magnitude
+			if d < bd then
+				best, bd = e, d
+			end
+		end
+	end
+	return best
+end
+
+function Ents.IsHuman(e)
+	return e.Def.Human == true
+end
+
+---------------------------------------------------------------------
+-- 이동 헬퍼
+---------------------------------------------------------------------
+local function moveTo(e, pos: Vector3, speedMul: number)
+	e.Hum.WalkSpeed = e.Def.Speed * speedMul
+	e.Hum:MoveTo(Vector3.new(pos.X, e.Root.Position.Y, pos.Z))
+end
+
+local function stop(e)
+	e.Hum:MoveTo(e.Root.Position)
+end
+
+local function face(e, pos: Vector3)
+	local p = e.Root.Position
+	local look = Vector3.new(pos.X, p.Y, pos.Z)
+	if (look - p).Magnitude > 0.5 then
+		e.Root.CFrame = CFrame.lookAt(p, look)
+	end
+end
+
+function Ents.Panic(e, from: Vector3, duration: number)
+	if e.Def.Hostile or e.Def.Vehicle or e.Possessor or e.Dead then
+		return
+	end
+	e.PanicUntil = math.max(e.PanicUntil, os.clock() + duration)
+	e.PanicFrom = from
+end
+
+function Ents.PanicNear(pos: Vector3, radius: number, duration: number?)
+	for _, e in ipairs(Ents.Near(pos, radius)) do
+		Ents.Panic(e, pos, duration or 5)
+	end
+end
+
+---------------------------------------------------------------------
+-- AI
+---------------------------------------------------------------------
+local function wander(e, now)
+	if now < e.NextWander then
+		return
+	end
+	e.NextWander = now + rng:NextNumber(2, 6)
+	if rng:NextNumber() < 0.3 and e.Type ~= "pigeon" then
+		stop(e)
+		return
+	end
+	local radius = if e.Type == "pigeon" then 40 elseif e.Type == "mouse" then 12 else 25
+	for _ = 1, 5 do
+		local a = rng:NextNumber(0, math.pi * 2)
+		local r = rng:NextNumber(3, radius)
+		local p = e.Home + Vector3.new(math.cos(a) * r, 0, math.sin(a) * r)
+		local comp = G.World.InCompound(p)
+		if (not comp or GD.Allow[comp][e.Type]) and G.World.InWorld(p) then
+			moveTo(e, p, if e.Type == "pigeon" then 0.45 else 0.32)
+			return
+		end
+	end
+end
+
+local function civAI(e, now)
+	if e.FollowUntil > now and e.FollowPlayer then
+		local ps = G.Players.State(e.FollowPlayer)
+		local body = ps and ps.Body
+		if body and Ents.Active(body) then
+			local d = (body.Root.Position - e.Root.Position).Magnitude
+			if d > 5 then
+				moveTo(e, body.Root.Position, 0.8)
+			else
+				stop(e)
+			end
+			return
+		end
+	end
+	if e.PanicUntil > now then
+		local away = e.Root.Position - e.PanicFrom
+		away = Vector3.new(away.X, 0, away.Z)
+		if away.Magnitude < 0.1 then
+			away = Vector3.new(rng:NextNumber(-1, 1), 0, rng:NextNumber(-1, 1))
+		end
+		local dir = (away.Unit + Vector3.new(rng:NextNumber(-0.4, 0.4), 0, rng:NextNumber(-0.4, 0.4))).Unit
+		moveTo(e, e.Root.Position + dir * 14, 1.05)
+		return
+	end
+	wander(e, now)
+end
+
+local function los(a: Vector3, b: Vector3): boolean
+	return G.Combat.LineOfSight(a, b)
+end
+
+local function hostileAI(e, now)
+	local myPos = e.Root.Position
+	local target = nil
+	local targetDist = math.huge
+
+	if e.ProvokedBy and now < e.ProvokedUntil then
+		local ps = G.Players.State(e.ProvokedBy)
+		if ps and ps.Body and Ents.Active(ps.Body) then
+			target = ps
+			targetDist = (ps.Body.Root.Position - myPos).Magnitude
+		end
+	end
+
+	if not target and e.Responder then
+		local ps = G.Players.State(e.Responder)
+		if ps and ps.Body and Ents.Active(ps.Body) and ps.Known and ps.Stars > 0 and not G.Players.IsInvisible(ps) then
+			target = ps
+			targetDist = (ps.Body.Root.Position - myPos).Magnitude
+		end
+	end
+
+	if not target then
+		local awareRange = AWARE[e.Type] or 32
+		for _, ps in ipairs(G.Players.Playing()) do
+			local body = ps.Body
+			if body and Ents.Active(body) and not G.Players.IsInvisible(ps) then
+				local d = (body.Root.Position - myPos).Magnitude
+				if d < awareRange and d < targetDist and G.Players.Suspicious(ps) and los(myPos, body.Root.Position) then
+					target, targetDist = ps, d
+				end
+			end
+		end
+	end
+
+	-- 냄새 맡기 (퇴마사 순찰 / 경찰견)
+	if not target and now >= e.SniffCd and ((e.Type == "hazmat" and e.Patrol) or (e.Type == "dog" and not e.Responder)) then
+		local range = if e.Type == "dog" then 22 else 18
+		for _, ps in ipairs(G.Players.Playing()) do
+			if ps.Host and ps.Stars == 0 and not G.Players.IsInvisible(ps) then
+				if (ps.Host.Root.Position - myPos).Magnitude < range then
+					e.SniffCd = now + (if e.Type == "dog" then 7 else 8)
+					G.Fx.Say(e, if e.Type == "dog" then "킁킁… 유령 냄새! 멍멍!" else "영기가 느껴진다!")
+					G.Players.Sniffed(ps)
+					break
+				end
+			end
+		end
+	end
+
+	if target then
+		local body = target.Body
+		local tpos = body.Root.Position
+		local d = (tpos - myPos).Magnitude
+		local seen = d < 48 and los(myPos, tpos)
+		e.Aware = true
+		if seen then
+			G.Players.MarkSeen(target, tpos)
+		end
+
+		local pref = PREF[e.Type] or 20
+		if d > pref + 3 then
+			moveTo(e, tpos, 0.9)
+		elseif d < pref - 5 and pref > 0 then
+			local away = (myPos - tpos) * Vector3.new(1, 0, 1)
+			if away.Magnitude > 0.1 then
+				moveTo(e, myPos + away.Unit * 8, 0.7)
+			end
+		else
+			stop(e)
+			face(e, tpos)
+		end
+
+		if d < (RANGE[e.Type] or 30) and now >= e.Cd and seen then
+			G.Combat.NpcAttack(e, body)
+		end
+	else
+		e.Aware = false
+		if e.Responder then
+			local ps = G.Players.State(e.Responder)
+			if ps and ps.LastSeen then
+				moveTo(e, ps.LastSeen, 0.8)
+				return
+			end
+		end
+		wander(e, now)
+	end
+end
+
+local function berserkAI(e, now)
+	if not e.Target or not Ents.Active(e.Target) or now > (e.RetargetAt or 0) then
+		e.RetargetAt = now + 0.8
+		local best, bd = nil, 50
+		for _, o in ipairs(list) do
+			if o ~= e and o.Type ~= e.Type and Ents.Active(o) then
+				local d = (o.Root.Position - e.Root.Position).Magnitude
+				if d < bd then
+					best, bd = o, d
+				end
+			end
+		end
+		e.Target = best
+	end
+	local t = e.Target
+	if not t then
+		civAI(e, now)
+		return
+	end
+	local d = (t.Root.Position - e.Root.Position).Magnitude
+	moveTo(e, t.Root.Position, 0.92)
+	if d < e.R + t.R + 1.5 and now >= e.Cd then
+		e.Cd = now + 0.75
+		G.Combat.Hurt(t, 16, e, nil)
+		if rng:NextNumber() < 0.4 then
+			G.Fx.Say(e, if rng:NextNumber() < 0.5 then "끼에엑!" else "크르르")
+		end
+	end
+end
+
+local function carAI(e, now)
+	if e.AI == "parked" then
+		stop(e)
+		return
+	end
+	if e.AI == "chase" and e.Responder then
+		local ps = G.Players.State(e.Responder)
+		if ps and ps.Body and Ents.Active(ps.Body) and ps.Stars > 0 then
+			moveTo(e, ps.Body.Root.Position, 0.9)
+			e.Chasing = true
+			return
+		end
+		e.Chasing = false
+		stop(e)
+		return
+	end
+	-- 도로 주행
+	if not e.Dir then
+		e.AI = "parked"
+		return
+	end
+	local W = G.World
+	local target = W.Intersection(e.IX, e.IY) + W.LaneOffset(e.Dir)
+	local pos = e.Root.Position
+	if (Vector3.new(target.X, pos.Y, target.Z) - pos).Magnitude < 5 then
+		local reverse = (e.Dir + 1) % 4 + 1
+		local options = {}
+		for d = 1, 4 do
+			if d ~= reverse and W.ValidNext(e.IX, e.IY, d) then
+				table.insert(options, d)
+			end
+		end
+		e.Dir = if #options > 0 then options[rng:NextInteger(1, #options)] else reverse
+		e.IX += W.DIRS[e.Dir][1]
+		e.IY += W.DIRS[e.Dir][2]
+		target = W.Intersection(e.IX, e.IY) + W.LaneOffset(e.Dir)
+	end
+	-- 막혔는지 확인
+	if now >= (e.StuckCheckAt or 0) then
+		if e.LastPos and (pos - e.LastPos).Magnitude < 1.5 then
+			local reverse = (e.Dir + 1) % 4 + 1
+			if W.ValidNext(e.IX - W.DIRS[e.Dir][1], e.IY - W.DIRS[e.Dir][2], reverse) then
+				e.IX -= W.DIRS[e.Dir][1]
+				e.IY -= W.DIRS[e.Dir][2]
+				e.Dir = reverse
+				e.IX += W.DIRS[e.Dir][1]
+				e.IY += W.DIRS[e.Dir][2]
+			end
+		end
+		e.LastPos = pos
+		e.StuckCheckAt = now + 2.5
+	end
+	moveTo(e, target, 0.6)
+end
+
+local function think(e, now)
+	if now < e.StunUntil then
+		stop(e)
+		return
+	end
+	local def = e.Def
+	if e.Type == "mutant" then
+		berserkAI(e, now)
+	elseif def.Vehicle and e.Type ~= "tank" then
+		carAI(e, now)
+	elseif def.Hostile then
+		if e.AI == "parked" and not e.Aware and not e.Responder then
+			-- 주차된 탱크: 근처에 의심스러운 대상이 있을 때만 깨어남
+			for _, ps in ipairs(G.Players.Playing()) do
+				if ps.Body and Ents.Active(ps.Body) and (ps.Body.Root.Position - e.Root.Position).Magnitude < 40 and G.Players.Suspicious(ps) then
+					e.AI = "hunt"
+				end
+			end
+			if e.AI == "parked" then
+				stop(e)
+				return
+			end
+		end
+		hostileAI(e, now)
+	else
+		civAI(e, now)
+	end
+end
+
+---------------------------------------------------------------------
+-- 인구 / 출동 관리
+---------------------------------------------------------------------
+local function farFromPlayers(pos: Vector3, minDist: number): boolean
+	for _, ps in ipairs(G.Players.Playing()) do
+		if ps.Body and (ps.Body.Root.Position - pos).Magnitude < minDist then
+			return false
+		end
+	end
+	return true
+end
+
+local function spawnFromPop(p, initial: boolean)
+	for _ = 1, 3 do
+		if p.Car then
+			local pos, dir, ix, iy = G.World.CarSpot()
+			if pos and (initial or farFromPlayers(pos, 60)) then
+				Ents.Spawn("car", pos, { AI = "drive", Dir = dir, IX = ix, IY = iy })
+				return true
+			end
+		else
+			local pos = p.Spot()
+			if pos and (initial or farFromPlayers(pos, 50)) then
+				Ents.Spawn(p.Type, pos, { AI = p.AI or "wander" })
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function managePopulation(initial: boolean)
+	local counts = {}
+	for _, e in ipairs(list) do
+		if not e.Dead and not e.Responder and not e.Possessor and not e.Patrol then
+			counts[e.Type] = (counts[e.Type] or 0) + 1
+		end
+	end
+	for _, p in ipairs(POP) do
+		local c = counts[p.Type] or 0
+		if initial then
+			for _ = c + 1, p.N do
+				spawnFromPop(p, true)
+			end
+		else
+			p.CdT = (p.CdT or 0) - 2
+			if p.CdT <= 0 and c < p.N then
+				if spawnFromPop(p, false) then
+					p.CdT = p.Cd or 0
+				end
+			end
+		end
+	end
+
+	-- 밤에는 퇴마사 순찰
+	if not initial then
+		local patrols = {}
+		for _, e in ipairs(list) do
+			if e.Patrol and not e.Dead then
+				table.insert(patrols, e)
+			end
+		end
+		if G.Players.IsNight() then
+			if #patrols < 6 then
+				local pos = G.World.ZoneSpot(CITYZ, false)
+				if pos then
+					Ents.Spawn("hazmat", pos, { Patrol = true })
+				end
+			end
+		else
+			for _, e in ipairs(patrols) do
+				if not e.Possessor and farFromPlayers(e.Root.Position, 60) then
+					Ents.Remove(e)
+				end
+			end
+		end
+	end
+end
+
+local function manageResponders()
+	for _, ps in ipairs(G.Players.Playing()) do
+		local body = ps.Body
+		if body and Ents.Active(body) then
+			local s = ps.Stars
+			local cnt = {}
+			local mine = {}
+			for _, e in ipairs(list) do
+				if e.Responder == ps.Player and not e.Dead and not e.Possessor then
+					cnt[e.Type] = (cnt[e.Type] or 0) + 1
+					table.insert(mine, e)
+				end
+			end
+			for _, entry in ipairs(GD.Responders[s]) do
+				local t, n = entry[1], entry[2]
+				if (cnt[t] or 0) < n then
+					local p = G.World.RoadPointNear(body.Root.Position, 45, 75)
+					if p then
+						Ents.Spawn(t, p, { Responder = ps.Player, AI = if t == "pcar" then "chase" else "hunt" })
+					end
+					break
+				end
+			end
+			if s == 0 then
+				for _, e in ipairs(mine) do
+					if (e.Root.Position - body.Root.Position).Magnitude > 60 then
+						Ents.Remove(e)
+					end
+				end
+			end
+		end
+	end
+end
+
+-- 플레이어가 나가거나 게임오버 때 출동 인원 정리
+function Ents.ClearResponders(player: Player)
+	for i = #list, 1, -1 do
+		local e = list[i]
+		if e.Responder == player and not e.Possessor then
+			Ents.Remove(e)
+		end
+	end
+end
+
+function Ents.Init(g)
+	G = g
+end
+
+function Ents.Start()
+	managePopulation(true)
+
+	-- AI 루프
+	task.spawn(function()
+		while true do
+			local now = os.clock()
+			for i = #list, 1, -1 do
+				local e = list[i]
+				if e then
+					if e.Dead then
+						if now >= (e.RemoveAt or 0) then
+							Ents.Remove(e)
+						end
+					elseif not e.Possessor and not e.IsGhost and e.Model.Parent then
+						local ok, err = pcall(think, e, now)
+						if not ok then
+							warn("[AI]", e.Type, err)
+						end
+					end
+				end
+			end
+			task.wait(0.2)
+		end
+	end)
+
+	-- 인구 / 출동 루프
+	task.spawn(function()
+		while true do
+			task.wait(2)
+			local ok, err = pcall(managePopulation, false)
+			if not ok then
+				warn("[Population]", err)
+			end
+			ok, err = pcall(manageResponders)
+			if not ok then
+				warn("[Responders]", err)
+			end
+		end
+	end)
+end
+
+return Ents
+]]></ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">Fx</string><ProtectedString name="Source"><![CDATA[-- 시각 효과: 폭발, 총알 궤적, 말풍선, 떠오르는 글자
+local Debris = game:GetService("Debris")
+local TweenService = game:GetService("TweenService")
+
+local Fx = {}
+local G
+
+function Fx.Init(g)
+	G = g
+end
+
+local function effectsFolder()
+	return G.World.Folders.Effects
+end
+
+-- 사운드는 에셋 ID가 필요해서 기본은 비워둠. 원하면 여기서 Sound를 재생하면 됨.
+function Fx.Sound(_name: string, _pos: Vector3?) end
+
+function Fx.Explosion(pos: Vector3, radius: number)
+	local e = Instance.new("Explosion")
+	e.Position = pos
+	e.BlastRadius = radius
+	e.BlastPressure = 0
+	e.DestroyJointRadiusPercent = 0
+	e.ExplosionType = Enum.ExplosionType.NoCraters
+	e.Parent = workspace
+	G.World.Debris(pos, 8, { Color3.fromRGB(255, 200, 60), Color3.fromRGB(255, 120, 40), Color3.fromRGB(80, 75, 80) }, 1.2, 35)
+end
+
+function Fx.Tracer(from: Vector3, to: Vector3, color: Color3, width: number?)
+	local dist = (to - from).Magnitude
+	if dist < 0.1 then
+		return
+	end
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.Material = Enum.Material.Neon
+	p.Color = color
+	p.Size = Vector3.new(width or 0.2, width or 0.2, dist)
+	p.CFrame = CFrame.lookAt((from + to) / 2, to)
+	p.Parent = effectsFolder()
+	TweenService:Create(p, TweenInfo.new(0.12), { Transparency = 1 }):Play()
+	Debris:AddItem(p, 0.15)
+end
+
+-- 날아가는 투사체 (보이는 것만). 도착하면 callback 실행
+function Fx.Lob(from: Vector3, to: Vector3, color: Color3, size: number, duration: number, callback: () -> ())
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.Shape = Enum.PartType.Ball
+	p.Size = Vector3.one * size
+	p.Material = Enum.Material.Neon
+	p.Color = color
+	p.CFrame = CFrame.new(from)
+	p.Parent = effectsFolder()
+	local start = os.clock()
+	local arc = math.min(8, (to - from).Magnitude * 0.2)
+	task.spawn(function()
+		while true do
+			local t = math.min(1, (os.clock() - start) / duration)
+			local pos = from:Lerp(to, t) + Vector3.new(0, math.sin(t * math.pi) * arc, 0)
+			p.CFrame = CFrame.new(pos)
+			if t >= 1 then
+				break
+			end
+			task.wait()
+		end
+		p:Destroy()
+		callback()
+	end)
+end
+
+function Fx.SoulTrail(from: Vector3, to: Vector3)
+	local n = math.clamp(math.floor((to - from).Magnitude / 3), 4, 20)
+	for i = 0, n do
+		local p = Instance.new("Part")
+		p.Anchored = true
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.Shape = Enum.PartType.Ball
+		p.Material = Enum.Material.Neon
+		p.Color = if i % 2 == 0 then Color3.fromRGB(207, 234, 255) else Color3.fromRGB(179, 156, 255)
+		p.Size = Vector3.one * 0.8
+		p.CFrame = CFrame.new(from:Lerp(to, i / n) + Vector3.new(0, 2, 0))
+		p.Parent = effectsFolder()
+		TweenService:Create(p, TweenInfo.new(0.3 + i / n * 0.35), { Transparency = 1, Size = Vector3.one * 0.1 }):Play()
+		Debris:AddItem(p, 0.7)
+	end
+end
+
+-- 몸 위 말풍선
+function Fx.Say(ent, text: string)
+	local head = ent.Model and ent.Model:FindFirstChild("Head")
+	if not head then
+		return
+	end
+	local gui = head:FindFirstChild("Say")
+	if not gui then
+		gui = Instance.new("BillboardGui")
+		gui.Name = "Say"
+		gui.Size = UDim2.fromOffset(160, 34)
+		gui.StudsOffset = Vector3.new(0, 2.6, 0)
+		gui.MaxDistance = 80
+		gui.Parent = head
+		local label = Instance.new("TextLabel")
+		label.Name = "Text"
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundColor3 = Color3.new(1, 1, 1)
+		label.TextColor3 = Color3.fromRGB(42, 31, 51)
+		label.Font = Enum.Font.GothamBold
+		label.TextScaled = true
+		label.Parent = gui
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = label
+		local pad = Instance.new("UIPadding")
+		pad.PaddingLeft = UDim.new(0, 6)
+		pad.PaddingRight = UDim.new(0, 6)
+		pad.PaddingTop = UDim.new(0, 3)
+		pad.PaddingBottom = UDim.new(0, 3)
+		pad.Parent = label
+	end
+	local label = gui:FindFirstChild("Text")
+	label.Text = text
+	gui.Enabled = true
+	ent.SayUntil = os.clock() + 1.6
+	local token = ent.SayUntil
+	task.delay(1.6, function()
+		if ent.SayUntil == token and gui.Parent then
+			gui.Enabled = false
+		end
+	end)
+end
+
+-- 체력바 (맞았을 때만 표시)
+function Fx.UpdateHealthBar(ent)
+	local head = ent.Model and ent.Model:FindFirstChild("Head")
+	if not head or ent.MaxHP <= 0 then
+		return
+	end
+	local gui = head:FindFirstChild("HP")
+	if not gui then
+		gui = Instance.new("BillboardGui")
+		gui.Name = "HP"
+		gui.Size = UDim2.fromOffset(60, 7)
+		gui.StudsOffset = Vector3.new(0, 1.6, 0)
+		gui.MaxDistance = 60
+		gui.Parent = head
+		local back = Instance.new("Frame")
+		back.Size = UDim2.fromScale(1, 1)
+		back.BackgroundColor3 = Color3.fromRGB(40, 30, 50)
+		back.BorderSizePixel = 0
+		back.Parent = gui
+		local fill = Instance.new("Frame")
+		fill.Name = "Fill"
+		fill.Size = UDim2.fromScale(1, 1)
+		fill.BackgroundColor3 = Color3.fromRGB(255, 90, 90)
+		fill.BorderSizePixel = 0
+		fill.Parent = back
+	end
+	local fill = gui:FindFirstChildWhichIsA("Frame"):FindFirstChild("Fill")
+	fill.Size = UDim2.fromScale(math.clamp(ent.HP / ent.MaxHP, 0, 1), 1)
+	gui.Enabled = ent.HP < ent.MaxHP and not ent.Possessor
+end
+
+return Fx
+]]></ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">GameState</string><ProtectedString name="Source"><![CDATA[-- 플레이어 상태: 영혼/빙의, 경계 단계, 미션, 진화, 구역 장악, 밤낮, 대퇴마사, 저장
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local DataStoreService = game:GetService("DataStoreService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GD = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameData"))
+
+local GS = {}
+local G
+local rng = Random.new()
+
+local states = {}
+local remote: RemoteEvent
+local store: DataStore? = nil
+local dayT = 20
+local wasNight = false
+local bossCd = 0
+
+local YELLOW = Color3.fromRGB(255, 224, 102)
+local CYAN = Color3.fromRGB(143, 232, 255)
+local GREEN = Color3.fromRGB(184, 255, 154)
+local PINK = Color3.fromRGB(255, 122, 122)
+
+local function now()
+	return os.clock()
+end
+
+local function pick(t)
+	return t[rng:NextInteger(1, #t)]
+end
+
+local function flat(v: Vector3)
+	return Vector3.new(v.X, 0, v.Z)
+end
+
+---------------------------------------------------------------------
+-- 통신
+---------------------------------------------------------------------
+function GS.Send(player: Player, kind: string, ...)
+	if player.Parent then
+		remote:FireClient(player, kind, ...)
+	end
+end
+
+function GS.Broadcast(kind: string, ...)
+	remote:FireAllClients(kind, ...)
+end
+
+function GS.Toast(player: Player, text: string)
+	GS.Send(player, "Toast", text)
+end
+
+function GS.Banner(player: Player, title: string, sub: string?)
+	GS.Send(player, "Banner", title, sub or "")
+end
+
+function GS.Pop(player: Player, pos: Vector3, text: string, color: Color3?)
+	GS.Send(player, "Pop", pos, text, color or Color3.new(1, 1, 1))
+end
+
+---------------------------------------------------------------------
+-- 조회
+---------------------------------------------------------------------
+function GS.State(player: Player)
+	return states[player]
+end
+
+function GS.Playing()
+	local out = {}
+	for _, ps in pairs(states) do
+		if ps.Playing then
+			table.insert(out, ps)
+		end
+	end
+	return out
+end
+
+local function darkness(): number
+	local t = dayT % GD.DAYLEN
+	if t < 150 then
+		return 0
+	elseif t < 175 then
+		return (t - 150) / 25
+	elseif t < 275 then
+		return 1
+	end
+	return 1 - (t - 275) / 25
+end
+
+function GS.IsNight(): boolean
+	return darkness() > 0.55
+end
+
+function GS.IsInvisible(ps): boolean
+	return now() < ps.InvisUntil
+end
+
+function GS.PowerMul(player: Player): number
+	local ps = states[player]
+	return if ps then 1 + 0.2 * ps.Upg.power else 1
+end
+
+local function lifeMul(ps)
+	return 1 + 0.25 * ps.Upg.life
+end
+local function dryMax(ps)
+	return 6 + 2 * ps.Upg.dry
+end
+local function jumpMul(ps)
+	return 1 + 0.2 * ps.Upg.jump
+end
+local function sneakMul(ps)
+	return 1 - 0.12 * ps.Upg.sneak
+end
+
+function GS.Suspicious(ps): boolean
+	if GS.IsInvisible(ps) then
+		return false
+	end
+	local body = ps.Body
+	if not body then
+		return false
+	end
+	if body.IsGhost then
+		return true
+	end
+	if ps.Stars >= 1 and ps.Known then
+		return true
+	end
+	local comp = G.World.InCompound(body.Root.Position)
+	if comp and not GD.Allow[comp][body.Type] then
+		return true
+	end
+	return false
+end
+
+function GS.MarkSeen(ps, pos: Vector3)
+	ps.Known = true
+	ps.LastSeen = pos
+	ps.LastSeenT = now()
+end
+
+function GS.Sniffed(ps)
+	ps.Heat = math.max(ps.Heat, GD.Stars[1] + 3)
+	ps.LastChaosT = now()
+	if ps.Body then
+		GS.MarkSeen(ps, ps.Body.Root.Position)
+		GS.Pop(ps.Player, ps.Body.Root.Position + Vector3.new(0, 6, 0), "영혼을 눈치챘다!", Color3.fromRGB(255, 154, 122))
+	end
+end
+
+---------------------------------------------------------------------
+-- 깽판 / 경계 / 구역
+---------------------------------------------------------------------
+local function save(ps)
+	if not store or not ps.CanSave then
+		return
+	end
+	local own = {}
+	for i = 1, 81 do
+		if ps.Own[i] then
+			table.insert(own, i)
+		end
+	end
+	local data = { Bio = math.floor(ps.Bio), Upg = ps.Upg, Mi = ps.Mi, Best = ps.Best, Own = own }
+	local userId = ps.Player.UserId
+	task.spawn(function()
+		local ok, err = pcall(function()
+			store:SetAsync("u_" .. userId, data, { userId })
+		end)
+		if not ok then
+			warn("[Bingui] 저장 실패:", err)
+		end
+	end)
+end
+GS.Save = save
+
+local function addFear(ps, pos: Vector3, pts: number)
+	if not G.World.InWorld(pos) then
+		return
+	end
+	local idx = G.World.BlockIndexAt(pos)
+	if ps.Own[idx] then
+		return
+	end
+	ps.Fear[idx] = math.min(100, ps.Fear[idx] + pts * 0.5)
+	if ps.Fear[idx] >= 100 then
+		ps.Own[idx] = true
+		local zone = G.World.ZoneAt(pos)
+		local count = 0
+		for i = 1, 81 do
+			if ps.Own[i] then
+				count += 1
+			end
+		end
+		GS.Banner(ps.Player, "👑 구역 장악!", `{GD.ZoneKo[zone] or zone} 구역이 유령의 영역이 됐다 ({count}/81)`)
+		ps.Bio += 30
+		save(ps)
+	end
+end
+
+local function markSeenByHostiles(ps)
+	if GS.IsInvisible(ps) or not ps.Body then
+		return
+	end
+	local pos = ps.Body.Root.Position
+	for _, o in ipairs(G.Ents.Near(pos, 45)) do
+		if o.Def.Hostile and not o.Possessor and G.Combat.LineOfSight(o.Root.Position, pos) then
+			GS.MarkSeen(ps, pos)
+			return
+		end
+	end
+end
+
+function GS.AddChaos(player: Player, pts: number, pos: Vector3, show: boolean?)
+	local ps = states[player]
+	if not ps or not ps.Playing then
+		return
+	end
+	ps.Chaos += pts
+	ps.Bio += pts * 0.5
+	local owned = G.World.InWorld(pos) and ps.Own[G.World.BlockIndexAt(pos)]
+	ps.Heat = math.min(620, ps.Heat + pts * sneakMul(ps) * (if owned then 0.6 else 1))
+	addFear(ps, pos, pts)
+	ps.LastChaosT = now()
+	if pts >= 3 then
+		markSeenByHostiles(ps)
+	end
+	if show ~= false and pts >= 3 then
+		GS.Pop(player, pos + Vector3.new(0, 5, 0), `+{math.floor(pts + 0.5)} 깽판`, YELLOW)
+	end
+end
+
+---------------------------------------------------------------------
+-- 미션
+---------------------------------------------------------------------
+local function hostIs(ps, t)
+	return ps.Host and ps.Host.Type == t
+end
+
+local CHECK = {
+	infect_mouse = function(_, o) return o.k == "infect" and o.type == "mouse" end,
+	cat_stall = function(ps, o) return o.k == "break" and o.kind == "stall" and hostIs(ps, "cat") end,
+	fridge = function(_, o) return o.k == "ia" and o.kind == "fridge" end,
+	poop = function(_, o) return o.k == "poophit" end,
+	fountain = function(_, o) return o.k == "fountain" end,
+	infect_police = function(_, o) return o.k == "infect" and o.type == "police" end,
+	ppc = function(_, o) return o.k == "ia" and o.kind == "ppc" end,
+	stars2 = function(_, o) return o.k == "stars" and o.n >= 2 end,
+	house = function(_, o) return o.k == "house" end,
+	gate_lab = function(_, o) return o.k == "gate" and o.g == "lab" end,
+	specimen = function(_, o) return o.k == "ia" and o.kind == "specimen" end,
+	infect_robot = function(_, o) return o.k == "infect" and o.type == "robot" end,
+	gate_base = function(_, o) return o.k == "gate" and o.g == "base" end,
+	infect_tank = function(_, o) return o.k == "infect" and o.type == "tank" end,
+	tank5 = function(ps, o) return o.k == "house" and hostIs(ps, "tank") end,
+	boss = function(_, o) return o.k == "boss" end,
+	s5 = function(_, o) return o.k == "s5tick" end,
+}
+
+local AUTO = {
+	stars2 = function(ps) return ps.Stars >= 2 end,
+	gate_lab = function() return G.World.Gates.lab and G.World.Gates.lab.Open end,
+	gate_base = function() return G.World.Gates.base and G.World.Gates.base.Open end,
+}
+
+local function completeMission(ps)
+	local m = GD.Missions[ps.Mi]
+	ps.Bio += m.Reward
+	GS.Banner(ps.Player, `미션 완료! +{m.Reward} 🧬`, m.Text)
+	ps.Mi += 1
+	ps.MProg = 0
+	save(ps)
+end
+
+function GS.Event(player: Player, o)
+	local ps = states[player]
+	if not ps or not ps.Playing then
+		return
+	end
+	local m = GD.Missions[ps.Mi]
+	if not m then
+		return
+	end
+	local check = CHECK[m.Id]
+	if check and check(ps, o) then
+		ps.MProg += 1
+		if not m.N or ps.MProg >= m.N then
+			completeMission(ps)
+		end
+	end
+end
+
+function GS.EventAll(o)
+	for _, ps in ipairs(GS.Playing()) do
+		GS.Event(ps.Player, o)
+	end
+end
+
+local function missionHint(ps): Vector3?
+	local m = GD.Missions[ps.Mi]
+	local body = ps.Body
+	if not m or not body then
+		return nil
+	end
+	local pos = body.Root.Position
+	local E, W = G.Ents, G.World
+	local function ent(t)
+		local e = E.Nearest(pos, t, body)
+		return e and e.Root.Position
+	end
+	local function prop(k)
+		local p = W.NearestProp(pos, k)
+		return p and p.Pos
+	end
+	local function house()
+		local best, bd = nil, math.huge
+		for _, b in pairs(W.Buildings) do
+			if not b.Destroyed then
+				local d = (b.CFrame.Position - pos).Magnitude
+				if d < bd then
+					best, bd = b.CFrame.Position, d
+				end
+			end
+		end
+		return best
+	end
+	local id = m.Id
+	if id == "infect_mouse" then
+		return ent("mouse")
+	elseif id == "cat_stall" then
+		return if hostIs(ps, "cat") then prop("stall") else ent("cat")
+	elseif id == "fridge" then
+		return prop("fridge")
+	elseif id == "poop" then
+		return if hostIs(ps, "pigeon") then ent("citizen") else ent("pigeon")
+	elseif id == "fountain" then
+		if hostIs(ps, "citizen") then
+			local best, bd = nil, math.huge
+			for _, f in ipairs(W.Fountains) do
+				local d = (f.Pos - pos).Magnitude
+				if d < bd then
+					best, bd = f.Pos, d
+				end
+			end
+			return best
+		end
+		return ent("citizen")
+	elseif id == "infect_police" then
+		return ent("police")
+	elseif id == "ppc" then
+		return prop("ppc")
+	elseif id == "house" then
+		return if body.Def.Vehicle then house() else ent("car")
+	elseif id == "gate_lab" then
+		return if hostIs(ps, "scientist") then W.Gates.lab.Pos else (ent("scientist") or W.Gates.lab.Pos)
+	elseif id == "specimen" then
+		return prop("specimen")
+	elseif id == "infect_robot" then
+		return ent("robot")
+	elseif id == "gate_base" then
+		return if hostIs(ps, "soldier") then W.Gates.base.Pos else (ent("soldier") or W.Gates.base.Pos)
+	elseif id == "infect_tank" then
+		return ent("tank")
+	elseif id == "tank5" then
+		return if hostIs(ps, "tank") then house() else ent("tank")
+	elseif id == "boss" then
+		return ent("exorcist")
+	end
+	return nil
+end
+
+---------------------------------------------------------------------
+-- 몸 전환 (빙의의 핵심: player.Character 를 바꿔치기)
+---------------------------------------------------------------------
+local function setCharacter(ps, e)
+	ps.Body = e
+	e.Hidden = false
+	e.Model.Parent = G.World.Folders.Bodies
+	ps.Player.Character = e.Model
+	pcall(function()
+		e.Root:SetNetworkOwner(ps.Player)
+	end)
+	e.Hum.WalkSpeed = e.Def.Speed
+	e.Hum.AutoRotate = true
+	G.Fx.UpdateHealthBar(e)
+end
+
+local function hideGhost(ps)
+	local g = ps.Ghost
+	if g then
+		g.Hidden = true
+		g.Model.Parent = nil
+	end
+end
+
+local function showGhostAt(ps, pos: Vector3, look: Vector3?)
+	local g = ps.Ghost
+	local y = 0.4 + g.Hum.HipHeight + g.Root.Size.Y / 2 + 0.2
+	local p = Vector3.new(pos.X, y, pos.Z)
+	g.Model:PivotTo(if look and look.Magnitude > 0.1 then CFrame.lookAt(p, p + look) else CFrame.new(p))
+	setCharacter(ps, g)
+end
+
+local function setGroup(e, group: string)
+	for _, p in ipairs(e.Model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.CollisionGroup = group
+		end
+	end
+end
+
+local function clearHostEffects(ps, h)
+	if ps.WallPassOn then
+		ps.WallPassOn = false
+		setGroup(h, "Bodies")
+	end
+	if ps.InvisParts then
+		for p, tr in pairs(ps.InvisParts) do
+			if p.Parent then
+				p.Transparency = tr
+			end
+		end
+		ps.InvisParts = nil
+	end
+	ps.WallPassUntil = 0
+	ps.NitroUntil = 0
+end
+
+local function releaseHost(ps, h, explodeSrc)
+	if not h then
+		return
+	end
+	clearHostEffects(ps, h)
+	h.Possessor = nil
+	ps.Host = nil
+	local pos = h.Root.Position
+	h.StunUntil = now() + 1.5
+	h.Home = pos
+	h.AI = if h.Def.Vehicle then "parked" elseif h.Def.Hostile then "hunt" else "wander"
+	h.PanicUntil = 0
+	pcall(function()
+		h.Root:SetNetworkOwner(nil)
+	end)
+	h.Hum:MoveTo(pos)
+	G.Fx.UpdateHealthBar(h)
+	ps.LastHost = h
+	ps.LastHostUntil = now() + 0.7
+	if not h.Def.Vehicle and h.HP < h.MaxHP * 0.15 then
+		G.Combat.Kill(h, nil, nil)
+	elseif not h.Def.Vehicle then
+		G.Fx.Say(h, pick({ "어? 내가 왜 여기…", "머리가 띵해…", "뭐였지?" }))
+	end
+	if ps.Upg.boom > 0 and not h.Dead then
+		local lv = ps.Upg.boom
+		G.Combat.Explode(pos, (45 + 20 * lv) * GD.K, 30 + 25 * lv, ps.Player, explodeSrc)
+	end
+end
+
+local function canPossess(e): boolean
+	if e.Def.Boss then
+		return e.HP <= e.MaxHP * 0.2
+	end
+	return true
+end
+
+function GS.Infect(ps, e)
+	if ps.Host == e or e.Dead or e.Possessor or e.IsGhost then
+		return
+	end
+	if ps.Host then
+		releaseHost(ps, ps.Host, e)
+	end
+	hideGhost(ps)
+	local player = ps.Player
+	e.Possessor = player
+	e.PanicUntil = 0
+	e.FollowUntil = 0
+	e.StunUntil = 0
+	e.ProvokedUntil = 0
+	e.Aware = false
+	e.Responder = nil
+	e.Chasing = false
+	ps.Host = e
+	ps.Dry = 0
+	ps.AbilityReady = now() + 0.35
+	ps.Splashed = false
+	setCharacter(ps, e)
+
+	local pos = e.Root.Position
+	G.World.Debris(pos + Vector3.new(0, 2, 0), 10, { Color3.fromRGB(207, 234, 255), Color3.fromRGB(179, 156, 255), Color3.new(1, 1, 1) }, 0.5, 18)
+	GS.Pop(player, pos + Vector3.new(0, 6, 0), e.Def.Name .. " 빙의!", Color3.fromRGB(207, 234, 255))
+
+	-- 변장: 아무도 안 볼 때 숙주를 바꾸면 경계가 내려감
+	local seen = false
+	for _, o in ipairs(G.Ents.Near(pos, 43)) do
+		if o ~= e and o.Def.Hostile and o.Aware and not o.Possessor then
+			seen = true
+			break
+		end
+	end
+	if not seen and ps.Heat > 5 then
+		ps.Heat *= 0.55
+		GS.Pop(player, pos + Vector3.new(0, 8, 0), "변장 성공!", CYAN)
+	end
+	if ps.Known or seen then
+		for _, o in ipairs(G.Ents.List) do
+			if o.Def.Hostile and not o.Possessor and not o.Dead then
+				if o.Aware and (o.Root.Position - pos).Magnitude < 64 and rng:NextNumber() < 0.6 then
+					G.Fx.Say(o, pick({ "어디 갔지?", "사라졌다?!", "놓쳤다!" }))
+				end
+				o.Aware = false
+				if o.ProvokedBy == player then
+					o.ProvokedUntil = 0
+				end
+			end
+		end
+		if ps.Heat >= GD.Stars[1] then
+			GS.Pop(player, pos + Vector3.new(0, 10, 0), "경찰이 너를 놓쳤다!", CYAN)
+		end
+	end
+	ps.Known = false
+
+	-- 공포의 강림
+	local fear = ps.Upg.fear
+	if fear > 0 then
+		local n = 0
+		for _, o in ipairs(G.Ents.Near(pos, 12.8 + 2.1 * fear)) do
+			if o ~= e and o.Def.Human and not o.Possessor then
+				o.StunUntil = now() + 1 + fear
+				n += 1
+			end
+		end
+		if n > 0 then
+			GS.Pop(player, pos + Vector3.new(0, 9, 0), "혼비백산! x" .. n, Color3.fromRGB(179, 156, 255))
+		end
+	end
+
+	if e.Type == "exorcist" then
+		GS.Event(player, { k = "boss" })
+		GS.Broadcast("Toast", "📰 대퇴마사가 유령에게 빙의당했다?!")
+	end
+	GS.Event(player, { k = "infect", type = e.Type })
+end
+
+local function findSoulTarget(ps)
+	local src = ps.Body
+	if not src then
+		return nil
+	end
+	local pos = src.Root.Position
+	local look = flat(src.Root.CFrame.LookVector)
+	look = if look.Magnitude > 0.01 then look.Unit else Vector3.new(0, 0, -1)
+	local range = GD.SoulRange(ps.Upg.jump)
+	local best, bs = nil, math.huge
+	for _, e in ipairs(G.Ents.Near(pos, range)) do
+		if e ~= src and not e.IsGhost and not e.Possessor and canPossess(e) then
+			local to = flat(e.Root.Position - pos)
+			local d = to.Magnitude
+			if d > 0.1 and d <= range then
+				local ang = math.acos(math.clamp(look:Dot(to.Unit), -1, 1))
+				if not (ang > 0.9 and d > 9.6) then
+					local score = d + ang * 17
+					if score < bs then
+						best, bs = e, score
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+function GS.Leap(ps)
+	if ps.Host or now() < ps.LeapCd then
+		return
+	end
+	ps.LeapCd = now() + 0.45
+	ps.LeapUntil = now() + 0.32
+	GS.Send(ps.Player, "Dash", 66 * jumpMul(ps), 0.32, true)
+end
+
+function GS.Dash(ps, speed: number, duration: number, dmg: number)
+	ps.DashUntil = now() + duration + 0.05
+	ps.DashHit = {}
+	ps.DashDmg = dmg
+	GS.Send(ps.Player, "Dash", speed, duration, false)
+end
+
+function GS.Nitro(ps, duration: number)
+	ps.NitroUntil = now() + duration
+	if ps.Host then
+		G.World.Debris(ps.Host.Root.Position, 8, { Color3.fromRGB(90, 240, 255), Color3.new(1, 1, 1) }, 0.6, 20)
+	end
+end
+
+function GS.WallPass(ps, duration: number)
+	if not ps.Host then
+		return
+	end
+	ps.WallPassUntil = now() + duration
+	ps.WallPassOn = true
+	setGroup(ps.Host, "Ghost")
+end
+
+function GS.SetInvisible(ps, duration: number)
+	ps.InvisUntil = now() + duration
+	if ps.Host and not ps.InvisParts then
+		ps.InvisParts = {}
+		for _, p in ipairs(ps.Host.Model:GetDescendants()) do
+			if p:IsA("BasePart") and p.Transparency < 0.5 then
+				ps.InvisParts[p] = p.Transparency
+				p.Transparency = 0.75
+			end
+		end
+	end
+end
+
+local function soulTeleport(ps, target)
+	local from = ps.Body.Root.Position
+	G.Fx.SoulTrail(from, target.Root.Position)
+	ps.TpCd = now() + 0.35
+	GS.Infect(ps, target)
+end
+
+local function exitHost(ps)
+	local h = ps.Host
+	if not h then
+		return
+	end
+	local pos = h.Root.Position
+	local look = flat(h.Root.CFrame.LookVector)
+	look = if look.Magnitude > 0.01 then look.Unit else Vector3.new(0, 0, -1)
+	releaseHost(ps, h, ps.Ghost)
+	showGhostAt(ps, pos + look * (h.R + 1.5), look)
+	ps.NoInfUntil = now() + 0.35
+	ps.LeapCd = 0
+	GS.Leap(ps)
+end
+
+local function possessAction(ps)
+	if now() < ps.TpCd then
+		return
+	end
+	local t = findSoulTarget(ps)
+	if t then
+		soulTeleport(ps, t)
+	elseif ps.Host then
+		exitHost(ps)
+	else
+		GS.Leap(ps)
+	end
+end
+
+---------------------------------------------------------------------
+-- 영혼 피해 / 몸 사망 / 게임오버
+---------------------------------------------------------------------
+local function gameOver(ps, why: string)
+	if not ps.Playing then
+		return
+	end
+	ps.Playing = false
+	ps.Best = math.max(ps.Best, math.floor(ps.Chaos))
+	local player = ps.Player
+	if ps.Host then
+		clearHostEffects(ps, ps.Host)
+		ps.Host.Possessor = nil
+		ps.Host = nil
+	end
+	if ps.Ghost then
+		G.Ents.Remove(ps.Ghost)
+		ps.Ghost = nil
+	end
+	ps.Body = nil
+	player.Character = nil
+	G.Ents.ClearResponders(player)
+	for _, o in ipairs(G.Ents.List) do
+		if o.ProvokedBy == player then
+			o.ProvokedUntil = 0
+			o.Aware = false
+		end
+	end
+	player:SetAttribute("Playing", false)
+	GS.Send(player, "GameOver", {
+		Why = why,
+		Chaos = math.floor(ps.Chaos),
+		Best = ps.Best,
+		Bio = math.floor(ps.Bio),
+	})
+	save(ps)
+end
+
+function GS.HurtGhost(player: Player)
+	local ps = states[player]
+	if not ps or not ps.Playing or ps.Host or now() < ps.InvUntil then
+		return
+	end
+	ps.GhostHP -= 1
+	ps.InvUntil = now() + 0.8
+	if ps.Ghost then
+		GS.Pop(player, ps.Ghost.Root.Position + Vector3.new(0, 4, 0), "아야!", PINK)
+		G.World.Debris(ps.Ghost.Root.Position, 8, { Color3.fromRGB(207, 234, 255), Color3.fromRGB(179, 156, 255) }, 0.5, 20)
+	end
+	if ps.GhostHP <= 0 then
+		gameOver(ps, "hit")
+	end
+end
+
+function GS.OnHostDied(player: Player, e)
+	local ps = states[player]
+	if not ps or ps.Host ~= e then
+		e.Possessor = nil
+		return
+	end
+	clearHostEffects(ps, e)
+	ps.Host = nil
+	e.Possessor = nil
+	local pos = e.Root.Position
+	showGhostAt(ps, pos, nil)
+	ps.InvUntil = now() + 1.2
+	ps.Dry = 0
+	ps.NoInfUntil = now() + 0.3
+	ps.LastHost = e
+	ps.LastHostUntil = now() + 1
+	GS.Pop(player, pos + Vector3.new(0, 6, 0), "몸이 쓰러졌다! 다른 몸으로!", GREEN)
+end
+
+function GS.BossDefeated(byPlayer: Player?)
+	bossCd = now() + 150
+	GS.Broadcast("Toast", "📰 충격! 대퇴마사, 정체불명 유령에게 패배")
+	if byPlayer then
+		local ps = states[byPlayer]
+		if ps then
+			ps.Bio += 300
+			GS.Banner(byPlayer, "대퇴마사 격파!!", "+300 🧬")
+			GS.Event(byPlayer, { k = "boss" })
+		end
+	end
+end
+
+---------------------------------------------------------------------
+-- 상호작용 / 진화
+---------------------------------------------------------------------
+local function interact(ps, propId)
+	local prop = G.World.Props[propId]
+	local h = ps.Host
+	if not prop or prop.Broken or not h or not G.Ents.Active(h) then
+		return
+	end
+	if (prop.Pos - h.Root.Position).Magnitude > 9 then
+		return
+	end
+	local t = now()
+	if t < (prop.UsedUntil or 0) then
+		GS.Toast(ps.Player, "이미 썼어요. 잠시 후에 다시!")
+		return
+	end
+	local player = ps.Player
+	local k = prop.Kind
+	if k == "fridge" then
+		if h.Def.Vehicle then
+			return
+		end
+		prop.UsedUntil = t + 30
+		h.HP = h.MaxHP
+		G.Fx.Say(h, "냠냠! 배부르다")
+		GS.Pop(player, h.Root.Position + Vector3.new(0, 6, 0), "몸 회복!", GREEN)
+	elseif k == "ppc" then
+		if not h.Def.Human then
+			GS.Toast(player, "사람 몸이 필요해요!")
+			return
+		end
+		prop.UsedUntil = t + 20
+		ps.Heat = 0
+		ps.Known = false
+		for _, o in ipairs(G.Ents.List) do
+			if o.ProvokedBy == player then
+				o.ProvokedUntil = 0
+			end
+			o.Aware = false
+		end
+		GS.Banner(player, "🖥️ 수배 기록 삭제!", "경계가 0이 됐다")
+	elseif k == "bed" then
+		if h.Def.Vehicle then
+			return
+		end
+		prop.UsedUntil = t + 30
+		h.HP = h.MaxHP
+		ps.Heat *= 0.7
+		G.Fx.Say(h, "쿨쿨… 잘 잤다!")
+	elseif k == "coffee" then
+		if not h.Def.Human then
+			GS.Toast(player, "사람 몸이 필요해요!")
+			return
+		end
+		prop.UsedUntil = t + 20
+		ps.CoffeeUntil = t + 12
+		G.Fx.Say(h, "카페인 충전!")
+	elseif k == "specimen" then
+		G.World.BreakProp(prop, player)
+		return
+	elseif k == "atm" then
+		G.Fx.Say(h, "돈이다!")
+		G.World.BreakProp(prop, player)
+		G.Combat.Scare(h, 20, 1, player)
+		GS.AddChaos(player, 10, prop.Pos)
+	else
+		return
+	end
+	GS.Event(player, { k = "ia", kind = k })
+end
+
+local function upgrade(ps, id)
+	local def
+	for _, u in ipairs(GD.Upgrades) do
+		if u.Id == id then
+			def = u
+		end
+	end
+	if not def then
+		return
+	end
+	local lv = ps.Upg[id] or 0
+	if lv >= def.Max then
+		return
+	end
+	local cost = GD.UpgradeCost(lv)
+	if ps.Bio < cost then
+		GS.Toast(ps.Player, "🧬이 부족해요!")
+		return
+	end
+	ps.Bio -= cost
+	ps.Upg[id] = lv + 1
+	if id == "hp" then
+		ps.GhostMax += 1
+		ps.GhostHP += 1
+	end
+	GS.Toast(ps.Player, `{def.Icon} {def.Name} Lv.{lv + 1}!`)
+	save(ps)
+end
+
+---------------------------------------------------------------------
+-- 시작
+---------------------------------------------------------------------
+local function startPlay(ps)
+	if ps.Playing or not ps.Loaded then
+		return
+	end
+	local ghost = G.Ents.Spawn("ghost", G.World.StartPos(), { IsGhost = true, Possessor = ps.Player })
+	ps.Ghost = ghost
+	ps.Host = nil
+	ps.GhostMax = 3 + ps.Upg.hp
+	ps.GhostHP = ps.GhostMax
+	ps.Dry = 0
+	ps.Heat = 0
+	ps.Chaos = 0
+	ps.Stars = 0
+	ps.Known = false
+	ps.LastSeen = nil
+	ps.S5Run = 0
+	ps.InvUntil = now() + 1.5
+	ps.Playing = true
+	setCharacter(ps, ghost)
+	ps.Player:SetAttribute("Playing", true)
+	GS.Banner(ps.Player, "👻 둥실둥실!", "몸에 닿거나 B(E키)로 빙의해요")
+end
+
+local function newState(player: Player)
+	local upg = {}
+	for _, u in ipairs(GD.Upgrades) do
+		upg[u.Id] = 0
+	end
+	local fear, own = {}, {}
+	for i = 1, 81 do
+		fear[i] = 0
+		own[i] = false
+	end
+	return {
+		Player = player,
+		Loaded = false,
+		CanSave = false,
+		Playing = false,
+		Ghost = nil,
+		Host = nil,
+		Body = nil,
+		GhostHP = 3,
+		GhostMax = 3,
+		InvUntil = 0,
+		Dry = 0,
+		NoInfUntil = 0,
+		LastHost = nil,
+		LastHostUntil = 0,
+		Heat = 0,
+		Chaos = 0,
+		Known = false,
+		LastSeen = nil,
+		LastSeenT = 0,
+		LastChaosT = -99,
+		Stars = 0,
+		S5Run = 0,
+		S5Acc = 0,
+		AbilityReady = 0,
+		SkillReady = 0,
+		InvisUntil = 0,
+		NitroUntil = 0,
+		CoffeeUntil = 0,
+		WallPassUntil = 0,
+		LeapUntil = 0,
+		LeapCd = 0,
+		DashUntil = 0,
+		TpCd = 0,
+		Bio = 0,
+		Upg = upg,
+		Mi = 1,
+		MProg = 0,
+		Best = 0,
+		Own = own,
+		Fear = fear,
+		HudT = 0,
+		HintT = 0,
+	}
+end
+
+local function loadData(ps)
+	if not store then
+		ps.Loaded = true
+		return
+	end
+	local ok, data = pcall(function()
+		return store:GetAsync("u_" .. ps.Player.UserId)
+	end)
+	if ok then
+		ps.CanSave = true
+		if type(data) == "table" then
+			ps.Bio = tonumber(data.Bio) or 0
+			ps.Mi = tonumber(data.Mi) or 1
+			ps.Best = tonumber(data.Best) or 0
+			if type(data.Upg) == "table" then
+				for k, v in pairs(data.Upg) do
+					if ps.Upg[k] ~= nil then
+						ps.Upg[k] = tonumber(v) or 0
+					end
+				end
+			end
+			if type(data.Own) == "table" then
+				for _, i in ipairs(data.Own) do
+					if ps.Own[i] ~= nil then
+						ps.Own[i] = true
+					end
+				end
+			end
+		end
+	else
+		warn("[Bingui] 불러오기 실패:", data)
+	end
+	ps.Loaded = true
+end
+
+---------------------------------------------------------------------
+-- 매 프레임
+---------------------------------------------------------------------
+local function updateHud(ps)
+	local p = ps.Player
+	local body = ps.Body
+	p:SetAttribute("Bio", math.floor(ps.Bio))
+	p:SetAttribute("Heat", math.floor(ps.Heat))
+	p:SetAttribute("Stars", ps.Stars)
+	p:SetAttribute("Mission", ps.Mi)
+	p:SetAttribute("MProg", ps.MProg)
+	p:SetAttribute("Upg", HttpService:JSONEncode(ps.Upg))
+	p:SetAttribute("Night", GS.IsNight())
+	local owned = 0
+	for i = 1, 81 do
+		if ps.Own[i] then
+			owned += 1
+		end
+	end
+	p:SetAttribute("Owned", owned)
+	if body then
+		p:SetAttribute("BodyType", body.Type)
+		p:SetAttribute("BodyName", body.Def.Name)
+		p:SetAttribute("AbilityName", body.Def.Ability or "")
+		p:SetAttribute("SkillName", if body.Def.Skill then body.Def.Skill[1] else "")
+		if body.IsGhost then
+			p:SetAttribute("Life", math.clamp(1 - ps.Dry / dryMax(ps), 0, 1))
+		else
+			p:SetAttribute("Life", math.clamp(body.HP / body.MaxHP, 0, 1))
+		end
+	end
+	p:SetAttribute("GhostHP", ps.GhostHP)
+	p:SetAttribute("GhostMax", ps.GhostMax)
+end
+
+local function tickPlayer(ps, dt)
+	local t = now()
+	local player = ps.Player
+	local body = ps.Body
+	if not body then
+		return
+	end
+
+	if ps.Host then
+		local h = ps.Host
+		local def = h.Def
+		local speed = def.Speed
+		if t < ps.NitroUntil then
+			speed *= 1.8
+		end
+		if t < ps.CoffeeUntil and not def.Vehicle then
+			speed *= 1.55
+		end
+		h.Hum.WalkSpeed = speed
+
+		h.HP -= h.MaxHP / (def.Life * lifeMul(ps)) * dt
+		if h.HP <= 0 then
+			G.Combat.Kill(h, nil, nil)
+			return
+		end
+
+		if def.Key then
+			local gate = G.World.Gates[def.Key]
+			if gate and not gate.Open and (gate.Pos - h.Root.Position).Magnitude < 12 then
+				G.World.OpenGate(def.Key, player)
+			end
+		end
+
+		if h.Type == "citizen" then
+			local inside = false
+			for _, f in ipairs(G.World.Fountains) do
+				if flat(f.Pos - h.Root.Position).Magnitude < f.R - 0.5 then
+					inside = true
+				end
+			end
+			if inside and not ps.Splashed then
+				ps.Splashed = true
+				G.Fx.Say(h, "퐁당!")
+				G.World.Debris(h.Root.Position, 14, { Color3.fromRGB(143, 216, 255), Color3.new(1, 1, 1) }, 0.5, 25)
+				GS.AddChaos(player, 8, h.Root.Position)
+				GS.Event(player, { k = "fountain" })
+			elseif not inside then
+				ps.Splashed = false
+			end
+		end
+
+		if ps.WallPassOn and t >= ps.WallPassUntil then
+			ps.WallPassOn = false
+			setGroup(h, "Bodies")
+		end
+		if ps.InvisParts and t >= ps.InvisUntil then
+			for p, tr in pairs(ps.InvisParts) do
+				if p.Parent then
+					p.Transparency = tr
+				end
+			end
+			ps.InvisParts = nil
+		end
+	else
+		-- 영혼 상태
+		ps.Dry += dt
+		if ps.Dry >= dryMax(ps) then
+			G.World.Debris(body.Root.Position, 16, { Color3.fromRGB(207, 234, 255), Color3.fromRGB(179, 156, 255), Color3.new(1, 1, 1) }, 0.6, 20)
+			gameOver(ps, "dry")
+			return
+		end
+		if t >= ps.NoInfUntil then
+			local bonus = if t < ps.LeapUntil then 1.2 else 0.5
+			for _, e in ipairs(G.Ents.Near(body.Root.Position, body.R + 4)) do
+				if e ~= body and not e.IsGhost and not e.Possessor and canPossess(e) and not (e == ps.LastHost and t < ps.LastHostUntil) then
+					if flat(e.Root.Position - body.Root.Position).Magnitude < body.R + e.R + bonus then
+						GS.Infect(ps, e)
+						break
+					end
+				end
+			end
+		end
+	end
+
+	if t < ps.DashUntil then
+		G.Combat.DashTick(ps)
+	end
+
+	-- 경계 감소
+	if t - ps.LastChaosT > 4 then
+		ps.Heat = math.max(0, ps.Heat - (5 + ps.Heat * 0.04) * dt)
+	end
+	if ps.Known and t - ps.LastSeenT > 10 then
+		ps.Known = false
+	end
+
+	local s = GD.StarsFor(ps.Heat)
+	if s > ps.Stars then
+		GS.Banner(player, "경계 " .. string.rep("★", s), GD.StarSub[s])
+		GS.Event(player, { k = "stars", n = s })
+	end
+	ps.Stars = s
+
+	if s == 5 then
+		ps.S5Acc += dt
+		if ps.S5Acc >= 1 then
+			ps.S5Acc -= 1
+			GS.Event(player, { k = "s5tick" })
+		end
+		ps.S5Run += dt
+	else
+		ps.S5Run = 0
+	end
+
+	-- 대퇴마사
+	if ps.S5Run > 25 and t >= bossCd then
+		local alive = false
+		for _, e in ipairs(G.Ents.List) do
+			if e.Type == "exorcist" and not e.Dead then
+				alive = true
+			end
+		end
+		if not alive then
+			local p = G.World.RoadPointNear(body.Root.Position, 30, 50)
+			if p then
+				bossCd = t + 200
+				G.Ents.Spawn("exorcist", p, { AI = "hunt", ProvokedBy = player, ProvokedUntil = t + 600 })
+				GS.Banner(player, "대퇴마사 등장!!", "결계와 부적을 조심해!")
+				GS.Broadcast("Toast", "📰 속보: 대퇴마사, 유령 퇴치를 위해 직접 출동")
+			end
+		end
+	end
+
+	-- 자동 달성 미션
+	local m = GD.Missions[ps.Mi]
+	if m and AUTO[m.Id] and AUTO[m.Id](ps) then
+		completeMission(ps)
+	end
+
+	if t >= ps.HintT then
+		ps.HintT = t + 1
+		local ok, hint = pcall(missionHint, ps)
+		player:SetAttribute("Hint", if ok then hint else nil)
+	end
+	if t >= ps.HudT then
+		ps.HudT = t + 0.1
+		updateHud(ps)
+	end
+end
+
+local function tickWorld(dt)
+	dayT += dt
+	local t = dayT % GD.DAYLEN
+	local clock
+	if t < 150 then
+		clock = 8 + t / 150 * 9
+	elseif t < 175 then
+		clock = 17 + (t - 150) / 25 * 3
+	elseif t < 275 then
+		clock = 20 + (t - 175) / 100 * 8
+	else
+		clock = 4 + (t - 275) / 25 * 4
+	end
+	Lighting.ClockTime = clock % 24
+	local night = GS.IsNight()
+	if night ~= wasNight then
+		wasNight = night
+		if night then
+			GS.Broadcast("Banner", "🌙 밤", "퇴마사 순찰 시작")
+		else
+			GS.Broadcast("Banner", "☀️ 아침", "시민들이 거리로 나온다")
+		end
+	end
+end
+
+---------------------------------------------------------------------
+-- 초기화
+---------------------------------------------------------------------
+function GS.Init(g, remotes: Folder)
+	G = g
+	remote = remotes:WaitForChild("Event") :: RemoteEvent
+	local action = remotes:WaitForChild("Action") :: RemoteEvent
+
+	local ok, err = pcall(function()
+		store = DataStoreService:GetDataStore("BinguiData_v1")
+	end)
+	if not ok then
+		warn("[Bingui] DataStore 사용 불가 (Studio라면 API 서비스 접근 허용을 켜세요):", err)
+	end
+
+	Lighting.Ambient = Color3.fromRGB(90, 85, 110)
+	Lighting.OutdoorAmbient = Color3.fromRGB(120, 115, 140)
+
+	action.OnServerEvent:Connect(function(player, kind, arg)
+		local ps = states[player]
+		if not ps or type(kind) ~= "string" then
+			return
+		end
+		if kind == "start" then
+			startPlay(ps)
+			return
+		elseif kind == "upgrade" then
+			if type(arg) == "string" then
+				upgrade(ps, arg)
+			end
+			return
+		end
+		if not ps.Playing then
+			return
+		end
+		local okA, errA = pcall(function()
+			if kind == "ability" then
+				G.Combat.PlayerAbility(ps)
+			elseif kind == "possess" then
+				possessAction(ps)
+			elseif kind == "skill" then
+				G.Combat.PlayerSkill(ps)
+			elseif kind == "interact" and type(arg) == "number" then
+				interact(ps, arg)
+			end
+		end)
+		if not okA then
+			warn("[Action]", kind, errA)
+		end
+	end)
+
+	local function onAdded(player: Player)
+		local ps = newState(player)
+		states[player] = ps
+		loadData(ps)
+		if not player.Parent then
+			states[player] = nil
+			return
+		end
+		updateHud(ps)
+		player:SetAttribute("Loaded", true)
+		if not ps.CanSave then
+			GS.Toast(player, "⚠ 저장 기능이 꺼져 있어요 (진행이 저장되지 않음)")
+		end
+	end
+	Players.PlayerAdded:Connect(onAdded)
+	for _, p in ipairs(Players:GetPlayers()) do
+		task.spawn(onAdded, p)
+	end
+
+	Players.PlayerRemoving:Connect(function(player)
+		local ps = states[player]
+		states[player] = nil
+		if not ps then
+			return
+		end
+		if ps.Host then
+			clearHostEffects(ps, ps.Host)
+			releaseHost(ps, ps.Host, nil)
+		end
+		if ps.Ghost then
+			G.Ents.Remove(ps.Ghost)
+		end
+		G.Ents.ClearResponders(player)
+		save(ps)
+	end)
+
+	task.spawn(function()
+		while true do
+			task.wait(60)
+			for _, ps in pairs(states) do
+				save(ps)
+			end
+		end
+	end)
+
+	game:BindToClose(function()
+		for _, ps in pairs(states) do
+			save(ps)
+		end
+		task.wait(3)
+	end)
+
+	RunService.Heartbeat:Connect(function(dt)
+		tickWorld(dt)
+		for _, ps in pairs(states) do
+			if ps.Playing then
+				local okT, errT = pcall(tickPlayer, ps, dt)
+				if not okT then
+					warn("[Tick]", errT)
+				end
+			end
+		end
+	end)
+end
+
+return GS
+]]></ProtectedString></Properties></Item>
+<Item class="Script" referent="RBX0000000A"><Properties><string name="Name">Main</string><ProtectedString name="Source"><![CDATA[-- 빙의 대소동 서버 진입점
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- 캐릭터는 직접 관리 (영혼/빙의한 몸을 player.Character 로 넣음)
+Players.CharacterAutoLoads = false
+
+local remotes = Instance.new("Folder")
+remotes.Name = "Remotes"
+local action = Instance.new("RemoteEvent")
+action.Name = "Action"
+action.Parent = remotes
+local event = Instance.new("RemoteEvent")
+event.Name = "Event"
+event.Parent = remotes
+remotes.Parent = ReplicatedStorage
+
+local G = {}
+G.World = require(script.Parent:WaitForChild("World"))
+G.Fx = require(script.Parent:WaitForChild("Fx"))
+G.Factory = require(script.Parent:WaitForChild("BodyFactory"))
+G.Ents = require(script.Parent:WaitForChild("Entities"))
+G.Combat = require(script.Parent:WaitForChild("Combat"))
+G.Players = require(script.Parent:WaitForChild("GameState"))
+
+G.World.Init(G)
+G.Fx.Init(G)
+G.Ents.Init(G)
+G.Combat.Init(G)
+G.Players.Init(G, remotes)
+G.Ents.Start()
+
+print("[빙의 대소동] 서버 준비 완료")
+]]></ProtectedString></Properties></Item>
+<Item class="ModuleScript" referent="RBX0000000B"><Properties><string name="Name">World</string><ProtectedString name="Source"><![CDATA[-- 도시 생성: 도로, 블록, 건물(부서짐/재건), 소품(부서짐/상호작용), 연구소·군사기지 담과 문
+local PhysicsService = game:GetService("PhysicsService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GD = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameData"))
+
+local World = {}
+local G
+
+local BS, RW, NB, WS = GD.BS, GD.RW, GD.NB, GD.WS
+local HALF = WS / 2
+local BLOCK = BS - RW -- 블록 한 변 (48)
+
+World.Buildings = {} -- [id] = building
+World.Props = {} -- [id] = prop
+World.Gates = {} -- [key] = gate
+World.Blocks = {} -- { I, J, Zone, Center }
+World.Fountains = {}
+
+local folders = {}
+local rng = Random.new(7)
+
+---------------------------------------------------------------------
+-- 좌표
+---------------------------------------------------------------------
+function World.ToWorld(x: number, z: number, y: number?): Vector3
+	return Vector3.new(x - HALF, y or 0, z - HALF)
+end
+
+function World.ToCity(pos: Vector3): (number, number)
+	return pos.X + HALF, pos.Z + HALF
+end
+
+function World.Intersection(ix: number, iy: number): Vector3
+	return World.ToWorld(ix * BS + RW / 2, iy * BS + RW / 2)
+end
+
+function World.BlockIndexAt(pos: Vector3): number
+	local x, z = World.ToCity(pos)
+	local i = math.clamp(math.floor((x - RW / 2) / BS), 0, NB - 1)
+	local j = math.clamp(math.floor((z - RW / 2) / BS), 0, NB - 1)
+	return j * NB + i + 1 -- 1..81
+end
+
+function World.ZoneAt(pos: Vector3): string
+	local idx = World.BlockIndexAt(pos) - 1
+	return GD.ZoneMap[idx // NB + 1][idx % NB + 1]
+end
+
+local LAB = { x = 6 * BS + RW, y = RW, w = 2 * BS - RW, h = 2 * BS - RW }
+local BASE = { x = 7 * BS + RW, y = 5 * BS + RW, w = 2 * BS - RW, h = 2 * BS - RW }
+World.LAB, World.BASE = LAB, BASE
+
+local function inRect(x, z, R)
+	return x >= R.x and x <= R.x + R.w and z >= R.y and z <= R.y + R.h
+end
+
+function World.InCompound(pos: Vector3): string?
+	local x, z = World.ToCity(pos)
+	if inRect(x, z, LAB) then
+		return "lab"
+	elseif inRect(x, z, BASE) then
+		return "base"
+	end
+	return nil
+end
+
+function World.InWorld(pos: Vector3): boolean
+	return math.abs(pos.X) < HALF + 40 and math.abs(pos.Z) < HALF + 40
+end
+
+---------------------------------------------------------------------
+-- 파트 헬퍼
+---------------------------------------------------------------------
+local function part(parent: Instance, size: Vector3, cf: CFrame, color: Color3, material: Enum.Material?, props: { [string]: any }?): Part
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	p.Size = size
+	p.CFrame = cf
+	p.Color = color
+	p.Material = material or Enum.Material.SmoothPlastic
+	if props then
+		for k, v in pairs(props) do
+			(p :: any)[k] = v
+		end
+	end
+	p.Parent = parent
+	return p
+end
+World.Part = part
+
+local function cylinder(parent, height, diameter, cf: CFrame, color, material, props)
+	local p = part(parent, Vector3.new(height, diameter, diameter), cf * CFrame.Angles(0, 0, math.rad(90)), color, material, props)
+	p.Shape = Enum.PartType.Cylinder
+	return p
+end
+
+local function ball(parent, diameter, cf, color, material)
+	local p = part(parent, Vector3.one * diameter, cf, color, material)
+	p.Shape = Enum.PartType.Ball
+	return p
+end
+
+local function setGroup(model: Instance, group: string)
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.CollisionGroup = group
+		end
+	end
+	if model:IsA("BasePart") then
+		model.CollisionGroup = group
+	end
+end
+
+local function hsv(h, s, v)
+	return Color3.fromHSV(h, s, v)
+end
+
+---------------------------------------------------------------------
+-- 이펙트용 간단 파편
+---------------------------------------------------------------------
+function World.Debris(pos: Vector3, count: number, colors: { Color3 }, size: number?, speed: number?)
+	for _ = 1, count do
+		local s = (size or 1) * rng:NextNumber(0.5, 1.2)
+		local p = Instance.new("Part")
+		p.Size = Vector3.new(s, s, s)
+		p.CFrame = CFrame.new(pos + Vector3.new(rng:NextNumber(-1, 1), rng:NextNumber(0, 1.5), rng:NextNumber(-1, 1)))
+		p.Color = colors[rng:NextInteger(1, #colors)]
+		p.Material = Enum.Material.SmoothPlastic
+		p.CanCollide = false
+		p.CanQuery = false
+		p.CanTouch = false
+		p.CollisionGroup = "Effects"
+		p.AssemblyLinearVelocity = Vector3.new(rng:NextNumber(-1, 1), rng:NextNumber(0.6, 1.4), rng:NextNumber(-1, 1)) * (speed or 25)
+		p.Parent = folders.Effects
+		game:GetService("Debris"):AddItem(p, 1.2)
+	end
+end
+
+---------------------------------------------------------------------
+-- 소품 (Props)
+---------------------------------------------------------------------
+local PROP_HP = {
+	stall = 30, bin = 10, hydrant = 40, barrel = 20, pump = 40, crate = 25, statue = 80, specimen = 40,
+	fridge = 40, tv = 15, pc = 15, ppc = 20, bed = 40, sofa = 30, lamp = 10, atm = 40, vending = 30,
+	coffee = 20, shelf = 25, desk = 20, bench = 20,
+}
+local PROP_INTERACT = {
+	fridge = "🍗 냉장고 털기",
+	ppc = "🖥️ 수배 기록 지우기",
+	bed = "💤 잠자기",
+	coffee = "☕ 커피 마시기",
+	specimen = "🧪 수조 깨기",
+	atm = "💸 ATM 털기",
+}
+local nextPropId = 0
+
+local function buildPropVisual(kind: string, model: Model, cf: CFrame, color: Color3?)
+	local WHITE = Color3.fromRGB(240, 240, 240)
+	local DARK = Color3.fromRGB(50, 50, 58)
+	if kind == "fridge" then
+		part(model, Vector3.new(3, 6, 2.4), cf * CFrame.new(0, 3, 0), WHITE)
+		part(model, Vector3.new(0.3, 2, 0.3), cf * CFrame.new(1.1, 3.6, -1.3), DARK, Enum.Material.Metal)
+		return 2
+	elseif kind == "tv" then
+		part(model, Vector3.new(4, 1.6, 1.6), cf * CFrame.new(0, 0.8, 0), Color3.fromRGB(120, 85, 60), Enum.Material.Wood)
+		part(model, Vector3.new(4.4, 2.6, 0.4), cf * CFrame.new(0, 3, 0), Color3.fromRGB(20, 20, 25))
+		part(model, Vector3.new(3.9, 2.1, 0.1), cf * CFrame.new(0, 3, -0.25), Color3.fromRGB(80, 160, 255), Enum.Material.Neon)
+		return 2.2
+	elseif kind == "bed" then
+		part(model, Vector3.new(4, 1.2, 7), cf * CFrame.new(0, 0.6, 0), Color3.fromRGB(110, 80, 60), Enum.Material.Wood)
+		part(model, Vector3.new(3.8, 0.5, 6.6), cf * CFrame.new(0, 1.4, 0), color or Color3.fromRGB(120, 160, 230), Enum.Material.Fabric)
+		part(model, Vector3.new(2.6, 0.5, 1.2), cf * CFrame.new(0, 1.8, -2.6), WHITE, Enum.Material.Fabric)
+		return 3
+	elseif kind == "sofa" then
+		local c = color or Color3.fromRGB(180, 90, 90)
+		part(model, Vector3.new(6, 1.4, 2.6), cf * CFrame.new(0, 0.7, 0), c, Enum.Material.Fabric)
+		part(model, Vector3.new(6, 1.8, 0.7), cf * CFrame.new(0, 2, 1), c, Enum.Material.Fabric)
+		return 3
+	elseif kind == "pc" or kind == "ppc" or kind == "desk" then
+		part(model, Vector3.new(4.5, 0.4, 2.5), cf * CFrame.new(0, 2.6, 0), Color3.fromRGB(150, 110, 75), Enum.Material.Wood)
+		for _, sx in ipairs({ -1, 1 }) do
+			part(model, Vector3.new(0.4, 2.4, 2.3), cf * CFrame.new(sx * 2, 1.2, 0), Color3.fromRGB(130, 95, 65), Enum.Material.Wood)
+		end
+		if kind ~= "desk" then
+			part(model, Vector3.new(2.2, 1.6, 0.3), cf * CFrame.new(0, 3.7, 0.4), DARK)
+			part(model, Vector3.new(1.9, 1.3, 0.1), cf * CFrame.new(0, 3.7, 0.22), if kind == "ppc" then Color3.fromRGB(90, 140, 255) else Color3.fromRGB(120, 255, 170), Enum.Material.Neon)
+		end
+		return 2.3
+	elseif kind == "stall" then
+		local c = color or hsv(rng:NextNumber(), 0.6, 0.95)
+		part(model, Vector3.new(6, 2.6, 3.4), cf * CFrame.new(0, 1.3, 0), Color3.fromRGB(150, 110, 75), Enum.Material.WoodPlanks)
+		for _, sx in ipairs({ -1, 1 }) do
+			part(model, Vector3.new(0.4, 5.5, 0.4), cf * CFrame.new(sx * 2.8, 2.75, 1.5), DARK)
+		end
+		part(model, Vector3.new(7, 0.4, 4.6), cf * CFrame.new(0, 5.6, 0.4) * CFrame.Angles(math.rad(-10), 0, 0), c, Enum.Material.Fabric)
+		for k = -1, 1 do
+			ball(model, 1, cf * CFrame.new(k * 1.8, 3.1, 0), hsv(rng:NextNumber(), 0.7, 0.95))
+		end
+		return 3.2
+	elseif kind == "bin" then
+		cylinder(model, 3, 2, cf * CFrame.new(0, 1.5, 0), Color3.fromRGB(70, 130, 70), Enum.Material.Metal)
+		return 1.1
+	elseif kind == "hydrant" then
+		cylinder(model, 2.4, 1, cf * CFrame.new(0, 1.2, 0), Color3.fromRGB(220, 50, 50), Enum.Material.Metal)
+		ball(model, 1.1, cf * CFrame.new(0, 2.5, 0), Color3.fromRGB(220, 50, 50), Enum.Material.Metal)
+		return 0.7
+	elseif kind == "barrel" then
+		cylinder(model, 3, 2, cf * CFrame.new(0, 1.5, 0), Color3.fromRGB(120, 220, 60), Enum.Material.Neon)
+		cylinder(model, 0.3, 2.1, cf * CFrame.new(0, 2.2, 0), DARK, Enum.Material.Metal)
+		return 1.1
+	elseif kind == "pump" then
+		part(model, Vector3.new(2, 4.6, 1.4), cf * CFrame.new(0, 2.3, 0), Color3.fromRGB(230, 60, 50))
+		part(model, Vector3.new(1.6, 1.2, 0.1), cf * CFrame.new(0, 3.4, -0.75), WHITE, Enum.Material.Neon)
+		return 1.3
+	elseif kind == "crate" then
+		part(model, Vector3.new(3, 3, 3), cf * CFrame.new(0, 1.5, 0), Color3.fromRGB(140, 120, 70), Enum.Material.WoodPlanks)
+		return 1.7
+	elseif kind == "statue" then
+		part(model, Vector3.new(4, 2, 4), cf * CFrame.new(0, 1, 0), Color3.fromRGB(150, 150, 155), Enum.Material.Marble)
+		part(model, Vector3.new(2, 3, 1.2), cf * CFrame.new(0, 3.5, 0), Color3.fromRGB(170, 175, 185), Enum.Material.Marble)
+		ball(model, 1.4, cf * CFrame.new(0, 5.7, 0), Color3.fromRGB(170, 175, 185), Enum.Material.Marble)
+		part(model, Vector3.new(0.6, 2.4, 0.6), cf * CFrame.new(1.4, 5, 0) * CFrame.Angles(0, 0, math.rad(-30)), Color3.fromRGB(170, 175, 185), Enum.Material.Marble)
+		return 2.2
+	elseif kind == "specimen" then
+		cylinder(model, 0.6, 4.4, cf * CFrame.new(0, 0.3, 0), DARK, Enum.Material.Metal)
+		cylinder(model, 6, 4, cf * CFrame.new(0, 3.6, 0), Color3.fromRGB(140, 230, 220), Enum.Material.Glass, { Transparency = 0.5 })
+		ball(model, 2, cf * CFrame.new(0, 3.4, 0), Color3.fromRGB(90, 200, 90), Enum.Material.Neon)
+		cylinder(model, 0.6, 4.4, cf * CFrame.new(0, 6.9, 0), DARK, Enum.Material.Metal)
+		return 2.2
+	elseif kind == "lamp" then
+		cylinder(model, 9, 0.5, cf * CFrame.new(0, 4.5, 0), DARK, Enum.Material.Metal)
+		local head = part(model, Vector3.new(1.4, 0.6, 1.4), cf * CFrame.new(0, 9.2, 0), Color3.fromRGB(255, 240, 180), Enum.Material.Neon)
+		local light = Instance.new("PointLight")
+		light.Range = 22
+		light.Brightness = 1.2
+		light.Color = Color3.fromRGB(255, 230, 170)
+		light.Parent = head
+		return 0.6
+	elseif kind == "atm" then
+		part(model, Vector3.new(2.6, 5, 2), cf * CFrame.new(0, 2.5, 0), Color3.fromRGB(60, 90, 140), Enum.Material.Metal)
+		part(model, Vector3.new(1.8, 1.2, 0.1), cf * CFrame.new(0, 3.4, -1.05), Color3.fromRGB(120, 255, 180), Enum.Material.Neon)
+		return 1.4
+	elseif kind == "vending" then
+		part(model, Vector3.new(3, 6, 2.4), cf * CFrame.new(0, 3, 0), Color3.fromRGB(220, 50, 60))
+		part(model, Vector3.new(2.2, 3.4, 0.1), cf * CFrame.new(-0.2, 3.6, -1.25), Color3.fromRGB(200, 240, 255), Enum.Material.Neon)
+		return 1.7
+	elseif kind == "coffee" then
+		part(model, Vector3.new(5, 3, 2.4), cf * CFrame.new(0, 1.5, 0), Color3.fromRGB(110, 75, 50), Enum.Material.Wood)
+		part(model, Vector3.new(1.6, 2, 1.4), cf * CFrame.new(-1, 4, 0), Color3.fromRGB(60, 60, 65), Enum.Material.Metal)
+		cylinder(model, 0.8, 0.8, cf * CFrame.new(1, 3.4, 0), WHITE)
+		return 2.5
+	elseif kind == "shelf" then
+		part(model, Vector3.new(6, 5, 1.6), cf * CFrame.new(0, 2.5, 0), Color3.fromRGB(200, 200, 205), Enum.Material.Metal)
+		for row = 1, 3 do
+			for k = -2, 2 do
+				part(model, Vector3.new(0.8, 0.9, 0.8), cf * CFrame.new(k * 1.1, row * 1.4 - 0.2, -0.5), hsv(rng:NextNumber(), 0.6, 0.95))
+			end
+		end
+		return 3
+	elseif kind == "bench" then
+		part(model, Vector3.new(5, 0.4, 1.6), cf * CFrame.new(0, 1.3, 0), Color3.fromRGB(150, 105, 65), Enum.Material.WoodPlanks)
+		part(model, Vector3.new(5, 1.2, 0.3), cf * CFrame.new(0, 2.1, 0.7), Color3.fromRGB(150, 105, 65), Enum.Material.WoodPlanks)
+		for _, sx in ipairs({ -1, 1 }) do
+			part(model, Vector3.new(0.3, 1.1, 1.4), cf * CFrame.new(sx * 2.1, 0.55, 0), DARK, Enum.Material.Metal)
+		end
+		return 2.5
+	end
+	part(model, Vector3.new(2, 2, 2), cf * CFrame.new(0, 1, 0), Color3.fromRGB(200, 200, 200))
+	return 1.2
+end
+
+function World.MakeProp(kind: string, cf: CFrame, building, color: Color3?)
+	nextPropId += 1
+	local model = Instance.new("Model")
+	model.Name = kind
+	local radius = buildPropVisual(kind, model, cf, color)
+
+	local prop = {
+		Id = nextPropId,
+		Kind = kind,
+		Model = model,
+		CFrame = cf,
+		Pos = cf.Position,
+		R = radius,
+		HP = PROP_HP[kind] or 0,
+		MaxHP = PROP_HP[kind] or 0,
+		Broken = false,
+		Building = building,
+		Color = color,
+		RepairAt = 0,
+	}
+	model:SetAttribute("PropId", prop.Id)
+	model:SetAttribute("Kind", kind)
+	if PROP_INTERACT[kind] then
+		model:SetAttribute("Interact", PROP_INTERACT[kind])
+	end
+	setGroup(model, "Walls")
+	model.Parent = folders.Props
+	World.Props[prop.Id] = prop
+	if building then
+		table.insert(building.Props, prop)
+	end
+	return prop
+end
+
+function World.PropFromPart(inst: Instance)
+	local model = inst.Parent
+	local id = model and model:GetAttribute("PropId")
+	return id and World.Props[id] or nil
+end
+
+local function hideProp(prop, hidden: boolean)
+	prop.Model:SetAttribute("Broken", hidden)
+	if hidden then
+		prop.Model.Parent = folders.BrokenProps
+	else
+		prop.Model.Parent = folders.Props
+	end
+end
+
+-- 소품 부수기 (효과는 Combat 쪽에서 처리)
+function World.BreakProp(prop, byPlayer: Player?, quiet: boolean?)
+	if prop.Broken or prop.MaxHP <= 0 then
+		return
+	end
+	prop.Broken = true
+	prop.HP = 0
+	prop.RepairAt = os.clock() + 45
+	hideProp(prop, true)
+	if not quiet then
+		G.Combat.OnPropBroken(prop, byPlayer)
+	end
+end
+
+function World.DamageProp(prop, dmg: number, byPlayer: Player?)
+	if prop.Broken or prop.MaxHP <= 0 then
+		return
+	end
+	prop.HP -= dmg
+	if prop.HP <= 0 then
+		World.BreakProp(prop, byPlayer)
+	end
+end
+
+function World.PropsNear(pos: Vector3, radius: number)
+	local list = {}
+	for _, prop in pairs(World.Props) do
+		if not prop.Broken then
+			local d = (prop.Pos - pos) * Vector3.new(1, 0, 1)
+			if d.Magnitude < radius + prop.R then
+				table.insert(list, prop)
+			end
+		end
+	end
+	return list
+end
+
+function World.NearestProp(pos: Vector3, kind: string)
+	local best, bd = nil, math.huge
+	for _, prop in pairs(World.Props) do
+		if prop.Kind == kind and not prop.Broken then
+			local d = (prop.Pos - pos).Magnitude
+			if d < bd then
+				best, bd = prop, d
+			end
+		end
+	end
+	return best
+end
+
+---------------------------------------------------------------------
+-- 건물
+---------------------------------------------------------------------
+local nextBuildingId = 0
+
+local BUILDING_STYLE = {
+	police = { Color3.fromRGB(150, 170, 200), Color3.fromRGB(40, 60, 110) },
+	school = { Color3.fromRGB(230, 200, 140), Color3.fromRGB(150, 70, 50) },
+	cafe = { Color3.fromRGB(240, 215, 175), Color3.fromRGB(120, 70, 50) },
+	mart = { Color3.fromRGB(220, 225, 235), Color3.fromRGB(60, 140, 90) },
+	hosp = { Color3.fromRGB(245, 248, 250), Color3.fromRGB(200, 60, 60) },
+	bank = { Color3.fromRGB(215, 205, 180), Color3.fromRGB(90, 80, 60) },
+	gas = { Color3.fromRGB(235, 235, 235), Color3.fromRGB(220, 60, 50) },
+	lab = { Color3.fromRGB(215, 235, 230), Color3.fromRGB(70, 150, 140) },
+	base = { Color3.fromRGB(150, 140, 95), Color3.fromRGB(80, 85, 55) },
+}
+
+local function buildShell(b)
+	local model = b.Model
+	model:ClearAllChildren()
+	local w, h, d = b.Size.X, b.Size.Y, b.Size.Z
+	local cf = b.CFrame
+	local wallC, roofC = b.WallColor, b.RoofColor
+	local mat = if b.Kind == "house" then Enum.Material.Brick else Enum.Material.Concrete
+
+	local function wall(size, offset)
+		local p = part(model, size, cf * CFrame.new(offset), wallC, mat)
+		p:SetAttribute("BuildingId", b.Id)
+		return p
+	end
+
+	local door = 7
+	wall(Vector3.new(w, h, 1), Vector3.new(0, h / 2, -d / 2 + 0.5))
+	wall(Vector3.new(1, h, d), Vector3.new(-w / 2 + 0.5, h / 2, 0))
+	wall(Vector3.new(1, h, d), Vector3.new(w / 2 - 0.5, h / 2, 0))
+	local seg = (w - door) / 2
+	wall(Vector3.new(seg, h, 1), Vector3.new(-(door / 2 + seg / 2), h / 2, d / 2 - 0.5))
+	wall(Vector3.new(seg, h, 1), Vector3.new(door / 2 + seg / 2, h / 2, d / 2 - 0.5))
+	wall(Vector3.new(door, h - 8, 1), Vector3.new(0, 8 + (h - 8) / 2, d / 2 - 0.5))
+
+	local roof = part(model, Vector3.new(w + 1.5, 1, d + 1.5), cf * CFrame.new(0, h + 0.5, 0), roofC, Enum.Material.Slate, { Name = "Roof" })
+	roof:SetAttribute("BuildingId", b.Id)
+
+	-- 창문
+	local glass = Color3.fromRGB(150, 200, 240)
+	local count = math.max(1, math.floor(w / 9))
+	for k = 1, count do
+		local x = -w / 2 + k * w / (count + 1)
+		if math.abs(x) > door / 2 + 2 then
+			part(model, Vector3.new(3, 3, 0.2), cf * CFrame.new(x, h * 0.55, d / 2 + 0.05), glass, Enum.Material.Glass, { CanCollide = false, Transparency = 0.2 })
+		end
+		part(model, Vector3.new(3, 3, 0.2), cf * CFrame.new(x, h * 0.55, -d / 2 - 0.05), glass, Enum.Material.Glass, { CanCollide = false, Transparency = 0.2 })
+	end
+
+	-- 실내 바닥
+	part(model, Vector3.new(w - 2, 0.2, d - 2), cf * CFrame.new(0, 0.5, 0), b.FloorColor, Enum.Material.WoodPlanks, { CanCollide = false, Name = "Floor" })
+
+	-- 간판
+	if b.Kind ~= "house" then
+		local sign = part(model, Vector3.new(math.min(w - 4, 16), 2.4, 0.4), cf * CFrame.new(0, h - 1.6, d / 2 + 0.3), Color3.fromRGB(30, 30, 40), Enum.Material.SmoothPlastic, { CanCollide = false })
+		local sg = Instance.new("SurfaceGui")
+		sg.Face = Enum.NormalId.Back
+		sg.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		sg.PixelsPerStud = 30
+		sg.Parent = sign
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundTransparency = 1
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBlack
+		label.TextColor3 = Color3.new(1, 1, 1)
+		label.Text = GD.BuildingName[b.Kind] or b.Kind
+		label.Parent = sg
+		if b.Kind == "hosp" then
+			part(model, Vector3.new(1, 4, 0.3), cf * CFrame.new(0, h + 3, 0), Color3.fromRGB(220, 40, 40), Enum.Material.Neon)
+			part(model, Vector3.new(4, 1, 0.3), cf * CFrame.new(0, h + 3, 0), Color3.fromRGB(220, 40, 40), Enum.Material.Neon)
+		end
+	end
+
+	setGroup(model, "Walls")
+end
+
+local function buildRubble(b)
+	local model = b.Model
+	model:ClearAllChildren()
+	local cf = b.CFrame
+	local colors = { b.WallColor, b.RoofColor, Color3.fromRGB(150, 140, 125), Color3.fromRGB(110, 100, 90) }
+	for _ = 1, 14 do
+		local s = Vector3.new(rng:NextNumber(2, 6), rng:NextNumber(0.8, 2.5), rng:NextNumber(2, 6))
+		local offset = Vector3.new(rng:NextNumber(-b.Size.X / 2.5, b.Size.X / 2.5), s.Y / 2, rng:NextNumber(-b.Size.Z / 2.5, b.Size.Z / 2.5))
+		part(model, s, cf * CFrame.new(offset) * CFrame.Angles(0, rng:NextNumber(0, 6), rng:NextNumber(-0.3, 0.3)), colors[rng:NextInteger(1, #colors)], Enum.Material.Slate, { CanCollide = false })
+	end
+	setGroup(model, "Walls")
+end
+
+function World.MakeBuilding(kind: string, cf: CFrame, size: Vector3)
+	nextBuildingId += 1
+	local style = BUILDING_STYLE[kind]
+	local b = {
+		Id = nextBuildingId,
+		Kind = kind,
+		CFrame = cf,
+		Size = size,
+		HP = GD.BuildingHP[kind] or 400,
+		MaxHP = GD.BuildingHP[kind] or 400,
+		Destroyed = false,
+		RebuildAt = 0,
+		Props = {},
+		WallColor = if style then style[1] else hsv(rng:NextNumber(), 0.25, 0.95),
+		RoofColor = if style then style[2] else hsv(rng:NextNumber(), 0.55, 0.6),
+		FloorColor = Color3.fromRGB(200, 170, 130),
+	}
+	local model = Instance.new("Model")
+	model.Name = kind .. b.Id
+	model:SetAttribute("BuildingId", b.Id)
+	model:SetAttribute("Center", cf.Position)
+	model:SetAttribute("Size", size)
+	model.Parent = folders.Buildings
+	b.Model = model
+	buildShell(b)
+	World.Buildings[b.Id] = b
+	return b
+end
+
+function World.BuildingFromPart(inst: Instance)
+	local id = inst:GetAttribute("BuildingId")
+	return id and World.Buildings[id] or nil
+end
+
+-- pos가 건물 안(바닥 기준)인지
+function World.BuildingAt(pos: Vector3)
+	for _, b in pairs(World.Buildings) do
+		if not b.Destroyed then
+			local lp = b.CFrame:PointToObjectSpace(pos)
+			if math.abs(lp.X) < b.Size.X / 2 and math.abs(lp.Z) < b.Size.Z / 2 then
+				return b
+			end
+		end
+	end
+	return nil
+end
+
+function World.DamageBuilding(b, dmg: number, byPlayer: Player?)
+	if not b or b.Destroyed then
+		return
+	end
+	b.HP -= dmg
+	if dmg > 8 then
+		local pos = b.CFrame.Position + Vector3.new(rng:NextNumber(-b.Size.X / 2, b.Size.X / 2), rng:NextNumber(2, b.Size.Y), rng:NextNumber(-b.Size.Z / 2, b.Size.Z / 2))
+		World.Debris(pos, 3, { b.WallColor, Color3.fromRGB(160, 150, 140) }, 1, 15)
+	end
+	if b.HP <= 0 then
+		World.DestroyBuilding(b, byPlayer)
+	end
+end
+
+function World.DestroyBuilding(b, byPlayer: Player?)
+	if b.Destroyed then
+		return
+	end
+	b.Destroyed = true
+	b.HP = 0
+	b.RebuildAt = os.clock() + 120
+	local center = b.CFrame.Position
+	World.Debris(center + Vector3.new(0, b.Size.Y / 2, 0), 30, { b.WallColor, b.RoofColor, Color3.fromRGB(170, 160, 140) }, 2.5, 40)
+	G.Fx.Sound("crash", center)
+	buildRubble(b)
+	for _, prop in ipairs(b.Props) do
+		World.BreakProp(prop, nil, true)
+	end
+	G.Combat.OnBuildingDestroyed(b, byPlayer)
+end
+
+function World.HitBuildingsInRadius(pos: Vector3, radius: number, dmg: number, byPlayer: Player?)
+	for _, b in pairs(World.Buildings) do
+		if not b.Destroyed then
+			local lp = b.CFrame:PointToObjectSpace(pos)
+			local cx = math.clamp(lp.X, -b.Size.X / 2, b.Size.X / 2)
+			local cz = math.clamp(lp.Z, -b.Size.Z / 2, b.Size.Z / 2)
+			local d = Vector2.new(lp.X - cx, lp.Z - cz).Magnitude
+			if d < radius then
+				World.DamageBuilding(b, dmg * 1.4 * (1 - d / radius * 0.5), byPlayer)
+			end
+		end
+	end
+end
+
+---------------------------------------------------------------------
+-- 문 (연구소 / 군사기지)
+---------------------------------------------------------------------
+function World.OpenGate(key: string, byPlayer: Player?)
+	local gate = World.Gates[key]
+	if not gate or gate.Open then
+		return
+	end
+	gate.Open = true
+	gate.Part.CanCollide = false
+	TweenService:Create(gate.Part, TweenInfo.new(1.2), { CFrame = gate.Part.CFrame * CFrame.new(0, -9, 0) }):Play()
+	G.Fx.Sound("gate", gate.Pos)
+	G.Players.Broadcast("Toast", if key == "lab" then "🚪 연구소 문이 열렸다!" else "🚪 군사기지 문이 열렸다!")
+	G.Players.EventAll({ k = "gate", g = key })
+end
+
+---------------------------------------------------------------------
+-- 도시 생성
+---------------------------------------------------------------------
+local ZONE_COLOR = {
+	home = Color3.fromRGB(124, 196, 86), park = Color3.fromRGB(95, 180, 68), market = Color3.fromRGB(234, 215, 168),
+	police = Color3.fromRGB(180, 184, 194), lab = Color3.fromRGB(207, 228, 222), base = Color3.fromRGB(185, 171, 114),
+	school = Color3.fromRGB(216, 192, 138), cafe = Color3.fromRGB(230, 207, 166), mart = Color3.fromRGB(196, 200, 208),
+	hosp = Color3.fromRGB(216, 228, 234), bank = Color3.fromRGB(212, 205, 184), gas = Color3.fromRGB(154, 160, 168),
+}
+
+local function tree(pos: Vector3)
+	local m = Instance.new("Model")
+	m.Name = "Tree"
+	cylinder(m, 6, 1.4, CFrame.new(pos + Vector3.new(0, 3.4, 0)), Color3.fromRGB(110, 75, 45), Enum.Material.Wood)
+	ball(m, 6.5, CFrame.new(pos + Vector3.new(0, 8, 0)), Color3.fromRGB(70, 160, 70), Enum.Material.Grass)
+	ball(m, 4.5, CFrame.new(pos + Vector3.new(1.2, 10.4, -0.8)), Color3.fromRGB(85, 175, 80), Enum.Material.Grass)
+	setGroup(m, "Walls")
+	m.Parent = folders.Decor
+end
+
+local function blockLayout(i: number, j: number, zone: string, center: Vector3)
+	local cf = CFrame.new(center + Vector3.new(0, 0.4, 0)) -- 블록 바닥 위
+	local function at(x, z, rot)
+		return cf * CFrame.new(x, 0, z) * CFrame.Angles(0, rot or 0, 0)
+	end
+
+	if zone == "home" then
+		local b = World.MakeBuilding("house", at(0, -2), Vector3.new(26, 12, 24))
+		World.MakeProp("fridge", at(-9, -10.5, math.pi), b)
+		World.MakeProp("tv", at(7, -11, math.pi), b)
+		World.MakeProp("bed", at(-9, 2), b, hsv(rng:NextNumber(), 0.4, 0.9))
+		World.MakeProp("sofa", at(7, -3, math.pi), b, hsv(rng:NextNumber(), 0.45, 0.8))
+		World.MakeProp("bin", at(19, 19))
+		tree(center + Vector3.new(-19, 0.4, 19))
+		if rng:NextNumber() < 0.5 then
+			tree(center + Vector3.new(19, 0.4, -19))
+		end
+	elseif zone == "park" then
+		-- 분수
+		local f = Instance.new("Model")
+		f.Name = "Fountain"
+		cylinder(f, 1.2, 14, at(0, 0) * CFrame.new(0, 0.6, 0), Color3.fromRGB(200, 200, 205), Enum.Material.Marble)
+		cylinder(f, 0.3, 12.4, at(0, 0) * CFrame.new(0, 1.15, 0), Color3.fromRGB(90, 170, 240), Enum.Material.Glass, { Transparency = 0.25, CanCollide = false })
+		cylinder(f, 4, 1.6, at(0, 0) * CFrame.new(0, 2.5, 0), Color3.fromRGB(200, 200, 205), Enum.Material.Marble)
+		local top = cylinder(f, 0.5, 4, at(0, 0) * CFrame.new(0, 4.5, 0), Color3.fromRGB(200, 200, 205), Enum.Material.Marble)
+		local att = Instance.new("Attachment")
+		att.CFrame = CFrame.Angles(0, 0, math.rad(-90))
+		att.Parent = top
+		local water = Instance.new("ParticleEmitter")
+		water.Color = ColorSequence.new(Color3.fromRGB(140, 200, 255), Color3.new(1, 1, 1))
+		water.Size = NumberSequence.new(0.5, 0.15)
+		water.Transparency = NumberSequence.new(0.2, 1)
+		water.Speed = NumberRange.new(9, 12)
+		water.SpreadAngle = Vector2.new(18, 18)
+		water.Acceleration = Vector3.new(0, -25, 0)
+		water.Lifetime = NumberRange.new(0.9, 1.1)
+		water.Rate = 40
+		water.EmissionDirection = Enum.NormalId.Top
+		water.Parent = att
+		for _, p in ipairs(f:GetDescendants()) do
+			if p:IsA("BasePart") then
+				p.CanCollide = false
+			end
+		end
+		f.Parent = folders.Decor
+		table.insert(World.Fountains, { Pos = center, R = 6.5 })
+
+		World.MakeProp("statue", at(-15, -15))
+		World.MakeProp("bench", at(0, 14, math.pi))
+		World.MakeProp("bench", at(14, 0, math.pi / 2))
+		World.MakeProp("lamp", at(-12, 12))
+		World.MakeProp("lamp", at(12, -12))
+		World.MakeProp("hydrant", at(20, 20))
+		for _, p in ipairs({ Vector3.new(-18, 0, 0), Vector3.new(18, 0, -18), Vector3.new(-6, 0, -19), Vector3.new(16, 0, 16), Vector3.new(-18, 0, 16) }) do
+			tree(center + p + Vector3.new(0, 0.4, 0))
+		end
+	elseif zone == "market" then
+		for row = 0, 1 do
+			for col = -1, 1 do
+				World.MakeProp("stall", at(col * 13, -8 + row * 15, row == 0 and 0 or math.pi))
+			end
+		end
+		World.MakeProp("bin", at(-20, 20))
+		World.MakeProp("bin", at(20, -20))
+		World.MakeProp("lamp", at(0, 20))
+	elseif zone == "police" then
+		local b = World.MakeBuilding("police", at(0, -4), Vector3.new(38, 14, 30))
+		World.MakeProp("ppc", at(-10, -14, math.pi), b)
+		World.MakeProp("pc", at(6, -14, math.pi), b)
+		World.MakeProp("desk", at(-10, 0), b)
+		World.MakeProp("vending", at(14, 4, -math.pi / 2), b)
+		World.MakeProp("hydrant", at(21, 18))
+	elseif zone == "school" then
+		local b = World.MakeBuilding("school", at(0, -4), Vector3.new(40, 16, 30))
+		for k = 0, 3 do
+			World.MakeProp("desk", at(-12 + (k % 2) * 24, -10 + (k // 2) * 10, math.pi), b)
+		end
+		World.MakeProp("vending", at(16, 6, -math.pi / 2), b)
+		tree(center + Vector3.new(-20, 0.4, 19))
+	elseif zone == "cafe" then
+		local b = World.MakeBuilding("cafe", at(0, -4), Vector3.new(28, 10, 22))
+		World.MakeProp("coffee", at(0, -11, math.pi), b)
+		World.MakeProp("desk", at(-7, 0), b)
+		World.MakeProp("desk", at(7, 0), b)
+		World.MakeProp("bench", at(-12, 18))
+		World.MakeProp("lamp", at(18, 18))
+	elseif zone == "mart" then
+		local b = World.MakeBuilding("mart", at(0, -4), Vector3.new(34, 12, 28))
+		for k = -1, 1 do
+			World.MakeProp("shelf", at(k * 10, -6), b)
+		end
+		World.MakeProp("vending", at(-12, 6, math.pi / 2), b)
+		World.MakeProp("fridge", at(12, 6, -math.pi / 2), b)
+		World.MakeProp("bin", at(20, 20))
+	elseif zone == "hosp" then
+		local b = World.MakeBuilding("hosp", at(0, -4), Vector3.new(36, 16, 30))
+		for k = -1, 1 do
+			World.MakeProp("bed", at(k * 10, -10), b, Color3.fromRGB(230, 240, 250))
+		end
+		World.MakeProp("desk", at(0, 4), b)
+	elseif zone == "bank" then
+		local b = World.MakeBuilding("bank", at(0, -4), Vector3.new(30, 14, 26))
+		World.MakeProp("atm", at(-8, -12, math.pi), b)
+		World.MakeProp("atm", at(8, -12, math.pi), b)
+		World.MakeProp("desk", at(0, -2), b)
+	elseif zone == "gas" then
+		local b = World.MakeBuilding("gas", at(-12, -14), Vector3.new(16, 9, 14))
+		World.MakeProp("vending", at(-12, -18, math.pi), b)
+		for _, x in ipairs({ -6, 4, 14 }) do
+			World.MakeProp("pump", at(x, 10))
+		end
+		local canopy = Instance.new("Model")
+		canopy.Name = "Canopy"
+		part(canopy, Vector3.new(30, 0.8, 12), at(4, 10) * CFrame.new(0, 10, 0), Color3.fromRGB(230, 60, 50))
+		for _, x in ipairs({ -10, 18 }) do
+			part(canopy, Vector3.new(0.8, 10, 0.8), at(x, 10) * CFrame.new(0, 5, 0), Color3.fromRGB(230, 230, 230), Enum.Material.Metal)
+		end
+		setGroup(canopy, "Walls")
+		canopy.Parent = folders.Decor
+		World.MakeProp("barrel", at(20, -18))
+	end
+end
+
+local function buildCompound(key: string, R, gateSide: string)
+	local x0, z0 = R.x, R.y
+	local p0 = World.ToWorld(x0, z0, 0)
+	local w, d = R.w, R.h
+	local center = p0 + Vector3.new(w / 2, 0, d / 2)
+	local compound = Instance.new("Model")
+	compound.Name = key .. "Compound"
+
+	part(folders.Ground, Vector3.new(w, 0.4, d), CFrame.new(center + Vector3.new(0, 0.2, 0)), ZONE_COLOR[key], Enum.Material.Concrete)
+
+	local wallC = if key == "lab" then Color3.fromRGB(190, 205, 205) else Color3.fromRGB(120, 115, 85)
+	local H, T, GATE = 10, 1.5, 12
+	local function wallSeg(size, pos)
+		part(compound, size, CFrame.new(pos), wallC, Enum.Material.Concrete)
+	end
+	-- 4면 (gateSide 쪽에 구멍)
+	local sides = {
+		north = { Vector3.new(w, H, T), center + Vector3.new(0, H / 2, -d / 2) },
+		south = { Vector3.new(w, H, T), center + Vector3.new(0, H / 2, d / 2) },
+		west = { Vector3.new(T, H, d), center + Vector3.new(-w / 2, H / 2, 0) },
+		east = { Vector3.new(T, H, d), center + Vector3.new(w / 2, H / 2, 0) },
+	}
+	for name, s in pairs(sides) do
+		if name ~= gateSide then
+			wallSeg(s[1], s[2])
+		else
+			local size, pos = s[1], s[2]
+			local horizontal = size.X > size.Z
+			local len = if horizontal then size.X else size.Z
+			local seg = (len - GATE) / 2
+			local offset = GATE / 2 + seg / 2
+			if horizontal then
+				wallSeg(Vector3.new(seg, H, T), pos + Vector3.new(-offset, 0, 0))
+				wallSeg(Vector3.new(seg, H, T), pos + Vector3.new(offset, 0, 0))
+			else
+				wallSeg(Vector3.new(T, H, seg), pos + Vector3.new(0, 0, -offset))
+				wallSeg(Vector3.new(T, H, seg), pos + Vector3.new(0, 0, offset))
+			end
+			local gatePart = part(compound, if horizontal then Vector3.new(GATE, H - 1, 1) else Vector3.new(1, H - 1, GATE), CFrame.new(pos - Vector3.new(0, 0.5, 0)), Color3.fromRGB(240, 200, 40), Enum.Material.DiamondPlate, { Name = "Gate" })
+			World.Gates[key] = { Part = gatePart, Open = false, Pos = pos }
+		end
+	end
+	setGroup(compound, "Walls")
+	compound.Parent = folders.Compounds
+
+	local cf = CFrame.new(center + Vector3.new(0, 0.4, 0))
+	local function at(x, z, rot)
+		return cf * CFrame.new(x, 0, z) * CFrame.Angles(0, rot or 0, 0)
+	end
+	if key == "lab" then
+		local b = World.MakeBuilding("lab", at(0, -18), Vector3.new(56, 14, 36))
+		for k = -1, 1 do
+			World.MakeProp("specimen", at(k * 12, -26), b)
+		end
+		World.MakeProp("pc", at(-18, -10), b)
+		World.MakeProp("pc", at(18, -10), b)
+		for _, p in ipairs({ Vector2.new(-30, 20), Vector2.new(-24, 24), Vector2.new(28, 22), Vector2.new(34, 18) }) do
+			World.MakeProp("barrel", at(p.X, p.Y))
+		end
+		World.MakeProp("lamp", at(-40, 40))
+		World.MakeProp("lamp", at(40, 40))
+	else
+		local b = World.MakeBuilding("base", at(-14, 20), Vector3.new(50, 12, 28))
+		World.MakeProp("bed", at(-30, 16), b, Color3.fromRGB(90, 100, 70))
+		World.MakeProp("bed", at(-22, 16), b, Color3.fromRGB(90, 100, 70))
+		World.MakeProp("pc", at(0, 28, math.pi), b)
+		for k = 0, 4 do
+			World.MakeProp("crate", at(26 + (k % 2) * 4, -30 + k * 5))
+		end
+		for k = 0, 2 do
+			World.MakeProp("barrel", at(-36 + k * 3, -36))
+		end
+		World.MakeProp("lamp", at(-44, -44))
+		World.MakeProp("lamp", at(44, 44))
+	end
+end
+
+function World.Init(g)
+	G = g
+
+	for _, group in ipairs({ "Walls", "Ghost", "Bodies", "Effects" }) do
+		pcall(function()
+			PhysicsService:RegisterCollisionGroup(group)
+		end)
+	end
+	PhysicsService:CollisionGroupSetCollidable("Ghost", "Walls", false)
+	PhysicsService:CollisionGroupSetCollidable("Ghost", "Bodies", false)
+	PhysicsService:CollisionGroupSetCollidable("Ghost", "Ghost", false)
+	PhysicsService:CollisionGroupSetCollidable("Effects", "Effects", false)
+	PhysicsService:CollisionGroupSetCollidable("Effects", "Bodies", false)
+	PhysicsService:CollisionGroupSetCollidable("Effects", "Ghost", false)
+
+	local city = Instance.new("Folder")
+	city.Name = "City"
+	city.Parent = workspace
+	for _, name in ipairs({ "Ground", "Buildings", "Props", "Decor", "Compounds" }) do
+		local f = Instance.new("Folder")
+		f.Name = name
+		f.Parent = city
+		folders[name] = f
+	end
+	local broken = Instance.new("Folder")
+	broken.Name = "BrokenProps"
+	broken.Parent = game:GetService("ServerStorage")
+	folders.BrokenProps = broken
+
+	for _, name in ipairs({ "Bodies", "Effects" }) do
+		local f = Instance.new("Folder")
+		f.Name = name
+		f.Parent = workspace
+		folders[name] = f
+	end
+	World.Folders = folders
+
+	local old = workspace:FindFirstChild("Baseplate")
+	if old then
+		old:Destroy()
+	end
+
+	-- 도로 바닥 (전체) + 바깥 잔디
+	part(folders.Ground, Vector3.new(WS + 400, 2, WS + 400), CFrame.new(0, -1.05, 0), Color3.fromRGB(80, 140, 70), Enum.Material.Grass, { Name = "Grass" })
+	part(folders.Ground, Vector3.new(WS, 2, WS), CFrame.new(0, -1, 0), Color3.fromRGB(70, 72, 80), Enum.Material.Asphalt, { Name = "Road" })
+
+	-- 차선 (교차로 사이 점선)
+	for k = 0, NB do
+		local line = k * BS + RW / 2
+		for seg = 0, NB - 1 do
+			local mid = seg * BS + RW + (BS - RW) / 2
+			part(folders.Ground, Vector3.new(0.4, 0.05, 30), CFrame.new(World.ToWorld(line, mid, 0.02)), Color3.fromRGB(240, 220, 120), Enum.Material.SmoothPlastic, { CanCollide = false })
+			part(folders.Ground, Vector3.new(30, 0.05, 0.4), CFrame.new(World.ToWorld(mid, line, 0.02)), Color3.fromRGB(240, 220, 120), Enum.Material.SmoothPlastic, { CanCollide = false })
+		end
+	end
+
+	-- 블록
+	for j = 0, NB - 1 do
+		for i = 0, NB - 1 do
+			local zone = GD.ZoneMap[j + 1][i + 1]
+			local center = World.ToWorld(i * BS + RW + BLOCK / 2, j * BS + RW + BLOCK / 2)
+			table.insert(World.Blocks, { I = i, J = j, Zone = zone, Center = center })
+			if zone ~= "lab" and zone ~= "base" then
+				local mat = if zone == "home" or zone == "park" then Enum.Material.Grass else Enum.Material.Concrete
+				part(folders.Ground, Vector3.new(BLOCK, 0.4, BLOCK), CFrame.new(center + Vector3.new(0, 0.2, 0)), ZONE_COLOR[zone], mat)
+				blockLayout(i, j, zone, center)
+			end
+		end
+	end
+
+	buildCompound("lab", LAB, "south")
+	buildCompound("base", BASE, "north")
+
+	-- 재건 / 수리 루프
+	task.spawn(function()
+		while true do
+			task.wait(2)
+			local now = os.clock()
+			for _, b in pairs(World.Buildings) do
+				if b.Destroyed and now >= b.RebuildAt then
+					b.Destroyed = false
+					b.HP = b.MaxHP
+					buildShell(b)
+					for _, prop in ipairs(b.Props) do
+						if prop.Broken then
+							prop.Broken = false
+							prop.HP = prop.MaxHP
+							hideProp(prop, false)
+						end
+					end
+				end
+			end
+			for _, prop in pairs(World.Props) do
+				if prop.Broken and now >= prop.RepairAt and not (prop.Building and prop.Building.Destroyed) then
+					prop.Broken = false
+					prop.HP = prop.MaxHP
+					hideProp(prop, false)
+				end
+			end
+		end
+	end)
+end
+
+---------------------------------------------------------------------
+-- 스폰 위치
+---------------------------------------------------------------------
+function World.StartPos(): Vector3
+	return World.Intersection(1, 1) + Vector3.new(0, 4, 0)
+end
+
+local function blocksOf(zones: { string })
+	local list = {}
+	local set = {}
+	for _, z in ipairs(zones) do
+		set[z] = true
+	end
+	for _, b in ipairs(World.Blocks) do
+		if set[b.Zone] then
+			table.insert(list, b)
+		end
+	end
+	return list
+end
+
+-- zones 중 한 블록 안의 랜덤 위치 (건물 안 허용 여부)
+function World.ZoneSpot(zones: { string }, allowIndoor: boolean?): Vector3?
+	local list = blocksOf(zones)
+	if #list == 0 then
+		return nil
+	end
+	for _ = 1, 12 do
+		local b = list[rng:NextInteger(1, #list)]
+		local spread = if b.Zone == "lab" or b.Zone == "base" then BLOCK / 2 + 6 else BLOCK / 2 - 3
+		local pos = b.Center + Vector3.new(rng:NextNumber(-spread, spread), 3, rng:NextNumber(-spread, spread))
+		if allowIndoor or not World.BuildingAt(pos) then
+			return pos
+		end
+	end
+	return nil
+end
+
+-- 근처 도로 위의 점 (출동 차량/경찰용)
+function World.RoadPointNear(pos: Vector3, dmin: number, dmax: number): Vector3?
+	local x, z = World.ToCity(pos)
+	for _ = 1, 30 do
+		local a = rng:NextNumber(0, math.pi * 2)
+		local d = rng:NextNumber(dmin, dmax)
+		local px, pz = x + math.cos(a) * d, z + math.sin(a) * d
+		if rng:NextNumber() < 0.5 then
+			px = math.floor((px - RW / 2) / BS + 0.5) * BS + RW / 2
+		else
+			pz = math.floor((pz - RW / 2) / BS + 0.5) * BS + RW / 2
+		end
+		px = math.clamp(px, RW / 2, WS - RW / 2)
+		pz = math.clamp(pz, RW / 2, WS - RW / 2)
+		local wp = World.ToWorld(px, pz, 3)
+		if not World.InCompound(wp) then
+			return wp
+		end
+	end
+	return nil
+end
+
+-- 자동차 주행 경로
+local DIRS = { { 1, 0 }, { 0, 1 }, { -1, 0 }, { 0, -1 } }
+World.DIRS = DIRS
+
+function World.ValidNext(ix: number, iy: number, dir: number): boolean
+	local nx, ny = ix + DIRS[dir][1], iy + DIRS[dir][2]
+	if nx < 0 or ny < 0 or nx > NB or ny > NB then
+		return false
+	end
+	local a, b = World.Intersection(ix, iy), World.Intersection(nx, ny)
+	if World.InCompound(b) or World.InCompound((a + b) / 2) then
+		return false
+	end
+	return true
+end
+
+function World.CarSpot(): (Vector3?, number?, number?, number?)
+	for _ = 1, 40 do
+		local ix, iy = rng:NextInteger(0, NB), rng:NextInteger(0, NB)
+		if not World.InCompound(World.Intersection(ix, iy)) then
+			local dirs = {}
+			for d = 1, 4 do
+				if World.ValidNext(ix, iy, d) then
+					table.insert(dirs, d)
+				end
+			end
+			if #dirs > 0 then
+				local d = dirs[rng:NextInteger(1, #dirs)]
+				local t = rng:NextNumber(0.2, 0.8)
+				local from = World.Intersection(ix, iy)
+				local to = World.Intersection(ix + DIRS[d][1], iy + DIRS[d][2])
+				local pos = from:Lerp(to, t) + World.LaneOffset(d) + Vector3.new(0, 3, 0)
+				return pos, d, ix + DIRS[d][1], iy + DIRS[d][2]
+			end
+		end
+	end
+	return nil
+end
+
+-- 우측 차선 오프셋
+function World.LaneOffset(dir: number): Vector3
+	local dx, dz = DIRS[dir][1], DIRS[dir][2]
+	return Vector3.new(-dz, 0, dx) * 3.5
+end
+
+return World
+]]></ProtectedString></Properties></Item>
+</Item>
+</Item>
+<Item class="StarterPlayer" referent="RBX00000011"><Properties><string name="Name">StarterPlayer</string></Properties><Item class="StarterPlayerScripts" referent="RBX00000010"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="Folder" referent="RBX0000000F"><Properties><string name="Name">Client</string></Properties><Item class="LocalScript" referent="RBX0000000E"><Properties><string name="Name">Client</string><ProtectedString name="Source"><![CDATA[-- 빙의 대소동 클라이언트: 화면(UI), 조작, 빙의 대상 표시, 지붕 숨기기, 돌진 이동
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+
+local player = Players.LocalPlayer
+local GD = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameData"))
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+local Action = Remotes:WaitForChild("Action") :: RemoteEvent
+local Event = Remotes:WaitForChild("Event") :: RemoteEvent
+
+local C = {
+	Dark = Color3.fromHex("#2a1f33"),
+	Cream = Color3.fromHex("#fffbea"),
+	Paper = Color3.fromHex("#f4efe2"),
+	Purple = Color3.fromHex("#b39cff"),
+	PurpleDark = Color3.fromHex("#26124d"),
+	Lilac = Color3.fromHex("#efeaff"),
+	Yellow = Color3.fromHex("#ffd23a"),
+	Blue = Color3.fromHex("#8fe8ff"),
+	Red = Color3.fromHex("#ff7a7a"),
+	Green = Color3.fromHex("#8fe08a"),
+	White = Color3.new(1, 1, 1),
+}
+
+---------------------------------------------------------------------
+-- UI 헬퍼
+---------------------------------------------------------------------
+local function make(className: string, props: { [string]: any }?, children: { Instance }?)
+	local inst = Instance.new(className)
+	local parent
+	for k, v in pairs(props or {}) do
+		if k == "Parent" then
+			parent = v
+		else
+			(inst :: any)[k] = v
+		end
+	end
+	for _, c in ipairs(children or {}) do
+		c.Parent = inst
+	end
+	if parent then
+		inst.Parent = parent
+	end
+	return inst
+end
+
+local function corner(r)
+	return make("UICorner", { CornerRadius = UDim.new(0, r or 10) })
+end
+local function stroke(color, t)
+	return make("UIStroke", { Color = color or C.Dark, Thickness = t or 3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border })
+end
+local function pad(px)
+	return make("UIPadding", { PaddingLeft = UDim.new(0, px), PaddingRight = UDim.new(0, px), PaddingTop = UDim.new(0, px), PaddingBottom = UDim.new(0, px) })
+end
+local function maxText(n)
+	return make("UITextSizeConstraint", { MaxTextSize = n })
+end
+
+local function label(props, children)
+	local base = { BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextColor3 = C.Dark, TextScaled = true, TextWrapped = true, Text = "" }
+	for k, v in pairs(props) do
+		base[k] = v
+	end
+	return make("TextLabel", base, children)
+end
+
+local function button(props, children)
+	local base = { AutoButtonColor = true, BorderSizePixel = 0, Font = Enum.Font.GothamBlack, TextColor3 = C.Dark, TextScaled = true, Text = "" }
+	for k, v in pairs(props) do
+		base[k] = v
+	end
+	return make("TextButton", base, children)
+end
+
+local scales = {}
+local function addScale(frame)
+	table.insert(scales, make("UIScale", { Parent = frame }))
+end
+local function updateScales()
+	local cam = workspace.CurrentCamera
+	if not cam then
+		return
+	end
+	local s = math.clamp(cam.ViewportSize.Y / 720, 0.62, 1)
+	for _, sc in ipairs(scales) do
+		sc.Scale = s
+	end
+end
+
+local gui = make("ScreenGui", { Name = "BinguiHUD", ResetOnSpawn = false, IgnoreGuiInset = false, ZIndexBehavior = Enum.ZIndexBehavior.Sibling, Parent = player:WaitForChild("PlayerGui") })
+local hud = make("Frame", { Name = "HUD", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false, Parent = gui })
+
+---------------------------------------------------------------------
+-- 상단 왼쪽: 진화 / 바이오 / 구역
+---------------------------------------------------------------------
+local topLeft = make("Frame", { Position = UDim2.fromOffset(10, 10), Size = UDim2.fromOffset(170, 120), BackgroundTransparency = 1, Parent = hud }, {
+	make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+})
+addScale(topLeft)
+local evoButton = button({ Size = UDim2.fromOffset(120, 36), BackgroundColor3 = C.Purple, TextColor3 = C.PurpleDark, Text = "🧬 진화", LayoutOrder = 1, Parent = topLeft }, { stroke(), pad(6) })
+local bioLabel = label({ Size = UDim2.fromOffset(170, 22), TextColor3 = C.White, TextStrokeTransparency = 0.3, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = 2, Parent = topLeft })
+local ownLabel = label({ Size = UDim2.fromOffset(170, 20), TextColor3 = C.White, TextStrokeTransparency = 0.3, TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = 3, Font = Enum.Font.GothamMedium, Parent = topLeft })
+
+---------------------------------------------------------------------
+-- 상단 가운데: 경계 별 + 몸 상태
+---------------------------------------------------------------------
+local topCenter = make("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 8), Size = UDim2.fromOffset(260, 92), BackgroundTransparency = 1, Parent = hud })
+addScale(topCenter)
+local starLabel = label({ Size = UDim2.new(1, 0, 0, 28), TextColor3 = C.Yellow, TextStrokeTransparency = 0.2, Font = Enum.Font.GothamBlack, Text = "☆☆☆☆☆", Parent = topCenter })
+local statusCard = make("Frame", { Position = UDim2.fromOffset(0, 32), Size = UDim2.new(1, 0, 0, 56), BackgroundColor3 = C.Paper, Parent = topCenter }, { stroke(), corner(8) })
+local bodyLabel = label({ Position = UDim2.fromOffset(10, 4), Size = UDim2.new(1, -20, 0, 22), TextXAlignment = Enum.TextXAlignment.Left, Parent = statusCard })
+local heartsLabel = label({ AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 4), Size = UDim2.fromOffset(90, 22), TextXAlignment = Enum.TextXAlignment.Right, TextColor3 = C.Red, Parent = statusCard })
+local lifeBack = make("Frame", { Position = UDim2.fromOffset(10, 32), Size = UDim2.new(1, -20, 0, 14), BackgroundColor3 = Color3.fromHex("#d8d0c0"), Parent = statusCard }, { corner(7) })
+local lifeFill = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.Purple, Parent = lifeBack }, { corner(7) })
+
+---------------------------------------------------------------------
+-- 상단 오른쪽: 미션
+---------------------------------------------------------------------
+local missionCard = make("Frame", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 10), Size = UDim2.fromOffset(250, 84), BackgroundColor3 = C.Cream, Parent = hud }, { stroke(), corner(8) })
+addScale(missionCard)
+local missionTitle = label({ Position = UDim2.fromOffset(10, 6), Size = UDim2.new(1, -20, 0, 18), TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = Color3.fromHex("#8a6ae8"), Font = Enum.Font.GothamBlack, Parent = missionCard })
+local missionText = label({ Position = UDim2.fromOffset(10, 26), Size = UDim2.new(1, -20, 0, 22), TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.GothamBlack, Parent = missionCard })
+local missionTip = label({ Position = UDim2.fromOffset(10, 50), Size = UDim2.new(1, -20, 0, 28), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top, Font = Enum.Font.GothamMedium, TextColor3 = Color3.fromHex("#5a4a66"), Parent = missionCard })
+
+---------------------------------------------------------------------
+-- 오른쪽 아래: 버튼들 (모바일 점프 버튼 위쪽)
+---------------------------------------------------------------------
+local cluster = make("Frame", { AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -12, 1, -170), Size = UDim2.fromOffset(200, 170), BackgroundTransparency = 1, Parent = hud })
+addScale(cluster)
+local aButton = button({ AnchorPoint = Vector2.new(1, 1), Position = UDim2.fromScale(1, 1), Size = UDim2.fromOffset(88, 88), BackgroundColor3 = C.Purple, TextColor3 = C.PurpleDark, Text = "A", Parent = cluster }, { stroke(nil, 4), corner(44), pad(10), maxText(16) })
+local bButton = button({ AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -98, 1, 0), Size = UDim2.fromOffset(70, 70), BackgroundColor3 = C.Paper, Text = "B 빙의", Parent = cluster }, { stroke(nil, 4), corner(35), pad(8), maxText(14) })
+local skillButton = button({ AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -98, 1, -78), Size = UDim2.fromOffset(70, 42), BackgroundColor3 = C.Blue, TextColor3 = Color3.fromHex("#0d2a3a"), Text = "스킬", Parent = cluster }, { stroke(nil, 3), corner(10), pad(5), maxText(12) })
+local interactButton = button({ AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, 0, 1, -98), Size = UDim2.fromOffset(120, 44), BackgroundColor3 = C.Yellow, TextColor3 = Color3.fromHex("#3a2a00"), Text = "", Visible = false, Parent = cluster }, { stroke(nil, 3), corner(10), pad(6), maxText(14) })
+
+local keyHint = label({
+	AnchorPoint = Vector2.new(0, 1),
+	Position = UDim2.new(0, 10, 1, -10),
+	Size = UDim2.fromOffset(420, 20),
+	TextColor3 = C.White,
+	TextStrokeTransparency = 0.3,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Font = Enum.Font.GothamMedium,
+	Text = "클릭/J: 능력   E/K: 빙의·순간이동   Q: 스킬   F: 상호작용",
+	Visible = not UserInputService.TouchEnabled,
+	Parent = hud,
+})
+
+---------------------------------------------------------------------
+-- 배너 / 뉴스 / 떠오르는 글자
+---------------------------------------------------------------------
+local banner = make("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 120), Size = UDim2.fromOffset(420, 70), BackgroundTransparency = 1, Visible = false, Parent = gui })
+addScale(banner)
+local bannerTitle = label({ Size = UDim2.new(1, 0, 0, 42), Font = Enum.Font.GothamBlack, TextColor3 = C.Purple, TextStrokeColor3 = C.Dark, TextStrokeTransparency = 0, Parent = banner })
+local bannerSub = label({ Position = UDim2.fromOffset(0, 42), Size = UDim2.new(1, 0, 0, 24), TextColor3 = C.White, TextStrokeTransparency = 0.2, Parent = banner })
+local bannerToken = 0
+
+local function showBanner(title: string, sub: string)
+	bannerToken += 1
+	local token = bannerToken
+	bannerTitle.Text = title
+	bannerSub.Text = sub or ""
+	banner.Visible = true
+	task.delay(2.8, function()
+		if bannerToken == token then
+			banner.Visible = false
+		end
+	end)
+end
+
+local toastHolder = make("Frame", { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -40), Size = UDim2.fromOffset(440, 160), BackgroundTransparency = 1, Parent = gui }, {
+	make("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder, VerticalAlignment = Enum.VerticalAlignment.Bottom, HorizontalAlignment = Enum.HorizontalAlignment.Center }),
+})
+addScale(toastHolder)
+local toastN = 0
+local function toast(text: string)
+	toastN += 1
+	local t = label({ Size = UDim2.fromOffset(420, 32), BackgroundTransparency = 0, BackgroundColor3 = C.Paper, Text = text, LayoutOrder = toastN, Parent = toastHolder }, { stroke(nil, 2), pad(6), maxText(16) })
+	local items = {}
+	for _, c in ipairs(toastHolder:GetChildren()) do
+		if c:IsA("TextLabel") then
+			table.insert(items, c)
+		end
+	end
+	if #items > 3 then
+		table.sort(items, function(a, b)
+			return a.LayoutOrder < b.LayoutOrder
+		end)
+		for i = 1, #items - 3 do
+			items[i]:Destroy()
+		end
+	end
+	task.delay(3.5, function()
+		if t.Parent then
+			t:Destroy()
+		end
+	end)
+end
+
+local function pop(pos: Vector3, text: string, color: Color3)
+	local anchor = Instance.new("Part")
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.CanQuery = false
+	anchor.CanTouch = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.one * 0.1
+	anchor.CFrame = CFrame.new(pos)
+	anchor.Parent = workspace
+	local bb = make("BillboardGui", { Size = UDim2.fromOffset(220, 34), AlwaysOnTop = true, Adornee = anchor, Parent = anchor })
+	local l = label({ Size = UDim2.fromScale(1, 1), Text = text, TextColor3 = color, TextStrokeTransparency = 0, Font = Enum.Font.GothamBlack, Parent = bb })
+	TweenService:Create(anchor, TweenInfo.new(1.2), { CFrame = CFrame.new(pos + Vector3.new(0, 4, 0)) }):Play()
+	TweenService:Create(l, TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+	task.delay(1.25, function()
+		anchor:Destroy()
+	end)
+end
+
+---------------------------------------------------------------------
+-- 오버레이 카드 (타이틀 / 게임오버 / 진화)
+---------------------------------------------------------------------
+local function overlay(name: string, height: number)
+	local ov = make("Frame", { Name = name, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.fromRGB(20, 14, 30), BackgroundTransparency = 0.22, Visible = false, ZIndex = 10, Parent = gui })
+	local card = make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(440, height), BackgroundColor3 = C.Cream, ZIndex = 11, Parent = ov }, { stroke(nil, 4), corner(6) })
+	addScale(card)
+	return ov, card
+end
+
+-- 타이틀
+local titleOv, titleCard = overlay("Title", 560)
+titleOv.Visible = true
+label({ Position = UDim2.fromOffset(20, 14), Size = UDim2.new(1, -40, 0, 30), Text = "👻", ZIndex = 12, Parent = titleCard })
+label({ Position = UDim2.fromOffset(20, 44), Size = UDim2.new(1, -40, 0, 44), Text = "빙의 대소동", TextColor3 = Color3.fromHex("#9a7cff"), TextStrokeColor3 = C.Dark, TextStrokeTransparency = 0, Font = Enum.Font.GothamBlack, ZIndex = 12, Parent = titleCard })
+label({ Position = UDim2.fromOffset(20, 90), Size = UDim2.new(1, -40, 0, 40), Font = Enum.Font.GothamMedium, Text = "몸을 잃어버린 귀여운 영혼 혼이!\n남의 몸에 빙의해서 도시를 난장판으로 만들어 보자.", ZIndex = 12, Parent = titleCard }, { maxText(16) })
+local how = make("Frame", { Position = UDim2.fromOffset(20, 138), Size = UDim2.new(1, -40, 0, 340), BackgroundColor3 = C.Lilac, ZIndex = 12, Parent = titleCard }, { stroke(nil, 3), pad(10) })
+label({
+	Size = UDim2.fromScale(1, 1),
+	Font = Enum.Font.GothamMedium,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	TextYAlignment = Enum.TextYAlignment.Top,
+	ZIndex = 13,
+	Text = table.concat({
+		"👻 영혼 상태로는 금방 흩어져요. 벽을 통과해 날아가서 몸에 닿으면 빙의해요.",
+		"💫 빙의한 몸은 오래 못 버텨요. B(E키)를 누르면 바라보는 쪽의 몸(흰 테두리)으로 순간이동!",
+		"🚪 건물 안 물건 앞에서 노란 버튼(F키)으로 상호작용해요.",
+		"🏚️ 건물도 부술 수 있어요. 차로 들이받고, 터뜨리고, 포격해요.",
+		"⭐ 깽판을 칠수록 경계 단계가 올라가고 경찰, 퇴마사, 군대가 와요.",
+		"🥸 아무도 안 볼 때 숙주를 바꾸면 변장돼서 경계가 내려가요.",
+		"🌀 몸마다 고유 스킬(파란 버튼, Q키)이 있어요. 밤엔 퇴마사가 순찰해요.",
+		"🎮 A(클릭/J) 몸의 능력, B(E/K) 순간이동 빙의",
+	}, "\n"),
+	Parent = how,
+}, { maxText(15) })
+local startButton = button({ AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -16), Size = UDim2.fromOffset(240, 52), BackgroundColor3 = C.Purple, TextColor3 = C.PurpleDark, Text = "불러오는 중…", ZIndex = 12, Parent = titleCard }, { stroke(nil, 4), pad(10) })
+
+-- 게임오버
+local overOv, overCard = overlay("Over", 250)
+local overTitle = label({ Position = UDim2.fromOffset(20, 20), Size = UDim2.new(1, -40, 0, 36), Font = Enum.Font.GothamBlack, TextColor3 = Color3.fromHex("#9a7cff"), TextStrokeColor3 = C.Dark, TextStrokeTransparency = 0, ZIndex = 12, Parent = overCard })
+local overScore = label({ Position = UDim2.fromOffset(20, 64), Size = UDim2.new(1, -40, 0, 48), Font = Enum.Font.GothamBold, ZIndex = 12, Parent = overCard }, { maxText(18) })
+label({ Position = UDim2.fromOffset(20, 116), Size = UDim2.new(1, -40, 0, 20), Font = Enum.Font.GothamMedium, TextTransparency = 0.3, Text = "진화와 미션 진행은 그대로 남아 있어요.", ZIndex = 12, Parent = overCard }, { maxText(13) })
+local againButton = button({ AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -18), Size = UDim2.fromOffset(220, 52), BackgroundColor3 = C.Purple, TextColor3 = C.PurpleDark, Text = "다시 둥실!", ZIndex = 12, Parent = overCard }, { stroke(nil, 4), pad(10) })
+
+-- 진화
+local evoOv, evoCard = overlay("Evo", 560)
+label({ Position = UDim2.fromOffset(20, 14), Size = UDim2.new(1, -40, 0, 32), Text = "🧬 진화", Font = Enum.Font.GothamBlack, TextColor3 = Color3.fromHex("#9a7cff"), TextStrokeColor3 = C.Dark, TextStrokeTransparency = 0, ZIndex = 12, Parent = evoCard })
+local evoBio = label({ Position = UDim2.fromOffset(20, 48), Size = UDim2.new(1, -40, 0, 22), ZIndex = 12, Parent = evoCard })
+local evoList = make("ScrollingFrame", { Position = UDim2.fromOffset(16, 76), Size = UDim2.new(1, -32, 1, -150), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 5, CanvasSize = UDim2.new(), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 12, Parent = evoCard }, {
+	make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+})
+local evoClose = button({ AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -14), Size = UDim2.fromOffset(200, 48), BackgroundColor3 = C.Purple, TextColor3 = C.PurpleDark, Text = "돌아가기", ZIndex = 12, Parent = evoCard }, { stroke(nil, 4), pad(10) })
+
+local evoRows = {}
+for i, u in ipairs(GD.Upgrades) do
+	local row = make("Frame", { Size = UDim2.new(1, -8, 0, 56), BackgroundColor3 = C.Lilac, LayoutOrder = i, ZIndex = 12, Parent = evoList }, { stroke(nil, 3) })
+	label({ Position = UDim2.fromOffset(8, 4), Size = UDim2.fromOffset(36, 48), Text = u.Icon, ZIndex = 13, Parent = row })
+	local name = label({ Position = UDim2.fromOffset(50, 4), Size = UDim2.new(1, -150, 0, 22), TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.GothamBlack, ZIndex = 13, Parent = row })
+	label({ Position = UDim2.fromOffset(50, 28), Size = UDim2.new(1, -150, 0, 22), TextXAlignment = Enum.TextXAlignment.Left, Font = Enum.Font.GothamMedium, TextTransparency = 0.2, Text = u.Desc, ZIndex = 13, Parent = row }, { maxText(13) })
+	local buy = button({ AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(84, 40), BackgroundColor3 = C.Purple, TextColor3 = C.PurpleDark, ZIndex = 13, Parent = row }, { stroke(nil, 3), pad(5), maxText(14) })
+	buy.Activated:Connect(function()
+		Action:FireServer("upgrade", u.Id)
+	end)
+	evoRows[u.Id] = { Name = name, Buy = buy, Def = u }
+end
+
+local function upgrades()
+	local raw = player:GetAttribute("Upg")
+	local ok, t = pcall(function()
+		return HttpService:JSONDecode(raw)
+	end)
+	return if ok and type(t) == "table" then t else {}
+end
+
+local function refreshEvo()
+	local bio = player:GetAttribute("Bio") or 0
+	evoBio.Text = `보유 🧬 {bio}`
+	local upg = upgrades()
+	for id, r in pairs(evoRows) do
+		local lv = upg[id] or 0
+		r.Name.Text = `{r.Def.Name}  Lv.{lv}/{r.Def.Max}`
+		if lv >= r.Def.Max then
+			r.Buy.Text = "MAX"
+			r.Buy.BackgroundColor3 = Color3.fromHex("#cfd2c4")
+		else
+			local cost = GD.UpgradeCost(lv)
+			r.Buy.Text = `🧬 {cost}`
+			r.Buy.BackgroundColor3 = if bio >= cost then C.Purple else Color3.fromHex("#cfd2c4")
+		end
+	end
+end
+
+evoButton.Activated:Connect(function()
+	refreshEvo()
+	evoOv.Visible = true
+end)
+evoClose.Activated:Connect(function()
+	evoOv.Visible = false
+end)
+
+startButton.Activated:Connect(function()
+	if player:GetAttribute("Loaded") then
+		titleOv.Visible = false
+		Action:FireServer("start")
+	end
+end)
+againButton.Activated:Connect(function()
+	overOv.Visible = false
+	Action:FireServer("start")
+end)
+
+local function onLoaded()
+	if player:GetAttribute("Loaded") then
+		startButton.Text = "둥실둥실 시작!"
+	end
+end
+player:GetAttributeChangedSignal("Loaded"):Connect(onLoaded)
+onLoaded()
+
+---------------------------------------------------------------------
+-- HUD 갱신
+---------------------------------------------------------------------
+local function refreshHud()
+	local playing = player:GetAttribute("Playing") == true
+	hud.Visible = playing
+	if not playing then
+		return
+	end
+	local stars = player:GetAttribute("Stars") or 0
+	starLabel.Text = string.rep("★", stars) .. string.rep("☆", 5 - stars)
+	bioLabel.Text = `🧬 {player:GetAttribute("Bio") or 0}`
+	ownLabel.Text = `👑 {player:GetAttribute("Owned") or 0}/81` .. (if player:GetAttribute("Night") then "   🌙 밤" else "")
+
+	local bodyType = player:GetAttribute("BodyType") or "ghost"
+	local isGhost = bodyType == "ghost"
+	local life = player:GetAttribute("Life") or 1
+	bodyLabel.Text = if isGhost then "👻 영혼 (흩어지는 중!)" else `💫 {player:GetAttribute("BodyName") or ""}`
+	lifeFill.Size = UDim2.fromScale(life, 1)
+	lifeFill.BackgroundColor3 = if life < 0.3 then C.Red elseif isGhost then C.Blue else C.Purple
+	local hp, hpMax = player:GetAttribute("GhostHP") or 3, player:GetAttribute("GhostMax") or 3
+	heartsLabel.Text = string.rep("♥", math.max(0, hp)) .. string.rep("♡", math.max(0, hpMax - hp))
+
+	aButton.Text = "A\n" .. (if isGhost then (if (upgrades().polter or 0) > 0 then "폴터가이스트" else "도약") else (player:GetAttribute("AbilityName") or ""))
+	bButton.Text = if isGhost then "B\n빙의" else "B\n순간이동"
+	local skill = player:GetAttribute("SkillName") or ""
+	skillButton.Visible = not isGhost and skill ~= ""
+
+	local mi = player:GetAttribute("Mission") or 1
+	local m = GD.Missions[mi]
+	if m then
+		local prog = if m.N then ` ({player:GetAttribute("MProg") or 0}/{m.N})` else ""
+		missionTitle.Text = `📜 미션 {mi}/{#GD.Missions}`
+		missionText.Text = m.Text .. prog
+		missionTip.Text = m.Tip
+	else
+		missionTitle.Text = "📜 미션"
+		missionText.Text = "모든 미션 완료! 🎉"
+		missionTip.Text = "자유롭게 깽판을 쳐요!"
+	end
+	if evoOv.Visible then
+		refreshEvo()
+	end
+end
+
+for _, attr in ipairs({ "Playing", "Stars", "Bio", "Owned", "Night", "BodyType", "BodyName", "Life", "GhostHP", "GhostMax", "AbilityName", "SkillName", "Mission", "MProg", "Upg" }) do
+	player:GetAttributeChangedSignal(attr):Connect(refreshHud)
+end
+refreshHud()
+
+---------------------------------------------------------------------
+-- 카메라: 몸이 바뀌면 따라가기
+---------------------------------------------------------------------
+player.CameraMaxZoomDistance = 80
+local function onCharacter()
+	local char = player.Character
+	if not char then
+		return
+	end
+	local hum = char:WaitForChild("Humanoid", 5)
+	if hum and workspace.CurrentCamera then
+		workspace.CurrentCamera.CameraSubject = hum
+	end
+end
+player:GetPropertyChangedSignal("Character"):Connect(onCharacter)
+
+local zoomedOnce = false
+player:GetAttributeChangedSignal("Playing"):Connect(function()
+	if player:GetAttribute("Playing") and not zoomedOnce then
+		zoomedOnce = true
+		player.CameraMinZoomDistance = 30
+		task.delay(0.5, function()
+			player.CameraMinZoomDistance = 0.5
+		end)
+	end
+end)
+
+---------------------------------------------------------------------
+-- 입력
+---------------------------------------------------------------------
+local abilityHeld = false
+local lastAbility = 0
+
+local function fireAbility()
+	local t = os.clock()
+	if t - lastAbility < 0.09 then
+		return
+	end
+	lastAbility = t
+	Action:FireServer("ability")
+end
+
+local currentProp = nil
+local function doInteract()
+	if currentProp then
+		Action:FireServer("interact", currentProp:GetAttribute("PropId"))
+	end
+end
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed or not player:GetAttribute("Playing") then
+		return
+	end
+	local k = input.KeyCode
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or k == Enum.KeyCode.J then
+		abilityHeld = true
+		fireAbility()
+	elseif k == Enum.KeyCode.E or k == Enum.KeyCode.K then
+		Action:FireServer("possess")
+	elseif k == Enum.KeyCode.Q then
+		Action:FireServer("skill")
+	elseif k == Enum.KeyCode.F or k == Enum.KeyCode.G or k == Enum.KeyCode.H then
+		doInteract()
+	end
+end)
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.J then
+		abilityHeld = false
+	end
+end)
+
+aButton.MouseButton1Down:Connect(function()
+	abilityHeld = true
+	fireAbility()
+end)
+aButton.MouseButton1Up:Connect(function()
+	abilityHeld = false
+end)
+aButton.MouseLeave:Connect(function()
+	abilityHeld = false
+end)
+bButton.Activated:Connect(function()
+	Action:FireServer("possess")
+end)
+skillButton.Activated:Connect(function()
+	Action:FireServer("skill")
+end)
+interactButton.Activated:Connect(doInteract)
+
+---------------------------------------------------------------------
+-- 서버 이벤트
+---------------------------------------------------------------------
+local wallParams = RaycastParams.new()
+wallParams.FilterType = Enum.RaycastFilterType.Include
+task.spawn(function()
+	local city = workspace:WaitForChild("City")
+	wallParams.FilterDescendantsInstances = { city:WaitForChild("Buildings"), city:WaitForChild("Compounds"), city:WaitForChild("Props") }
+end)
+
+local function dash(speed: number, duration: number, passWalls: boolean)
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+	local look = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+	look = if look.Magnitude > 0.01 then look.Unit else Vector3.new(0, 0, -1)
+	local elapsed = 0
+	local conn
+	conn = RunService.Heartbeat:Connect(function(dt)
+		elapsed += dt
+		if elapsed >= duration or not root.Parent or player.Character ~= char then
+			conn:Disconnect()
+			return
+		end
+		local step = look * speed * dt
+		if not passWalls then
+			local hit = workspace:Raycast(root.Position, look * (step.Magnitude + root.Size.Z / 2 + 0.5), wallParams)
+			if hit then
+				conn:Disconnect()
+				return
+			end
+		end
+		root.CFrame += step
+	end)
+end
+
+Event.OnClientEvent:Connect(function(kind, a, b, c)
+	if kind == "Banner" then
+		showBanner(a, b)
+	elseif kind == "Toast" then
+		toast(a)
+	elseif kind == "Pop" then
+		pop(a, b, c)
+	elseif kind == "Dash" then
+		dash(a, b, c)
+	elseif kind == "GameOver" then
+		abilityHeld = false
+		overTitle.Text = if a.Why == "dry" then "영혼이 흩어졌다…" else "영혼이 퇴치당했다…"
+		overScore.Text = `이번 깽판 점수 {a.Chaos}\n최고 기록 {a.Best} · 🧬 {a.Bio}`
+		task.delay(0.6, function()
+			overOv.Visible = true
+		end)
+	end
+end)
+
+---------------------------------------------------------------------
+-- 빙의 대상 표시 / 상호작용 / 지붕 / 미션 표시
+---------------------------------------------------------------------
+local highlight = make("Highlight", { FillTransparency = 1, OutlineColor = C.White, OutlineTransparency = 0, DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Enabled = false, Parent = workspace })
+
+local hintPart = make("Part", { Anchored = true, CanCollide = false, CanQuery = false, CanTouch = false, Transparency = 1, Size = Vector3.one * 0.2, Parent = workspace })
+local hintGui = make("BillboardGui", { Size = UDim2.fromOffset(40, 40), StudsOffset = Vector3.new(0, 7, 0), AlwaysOnTop = true, Adornee = hintPart, Enabled = false, Parent = hintPart })
+label({ Size = UDim2.fromScale(1, 1), Text = "📍", Parent = hintGui })
+
+local function findTarget(root: BasePart)
+	local bodies = workspace:FindFirstChild("Bodies")
+	if not bodies then
+		return nil
+	end
+	local upg = upgrades()
+	local range = GD.SoulRange(upg.jump or 0)
+	local pos = root.Position
+	local look = root.CFrame.LookVector * Vector3.new(1, 0, 1)
+	look = if look.Magnitude > 0.01 then look.Unit else Vector3.new(0, 0, -1)
+	local best, bs = nil, math.huge
+	for _, m in ipairs(bodies:GetChildren()) do
+		if m ~= player.Character and m:GetAttribute("Type") and m:GetAttribute("Type") ~= "ghost" and not m:GetAttribute("Dead") and m:GetAttribute("Possessable") ~= false and not Players:GetPlayerFromCharacter(m) then
+			local r = m:FindFirstChild("HumanoidRootPart")
+			if r then
+				local to = (r.Position - pos) * Vector3.new(1, 0, 1)
+				local d = to.Magnitude
+				if d > 0.1 and d <= range then
+					local ang = math.acos(math.clamp(look:Dot(to.Unit), -1, 1))
+					if not (ang > 0.9 and d > 9.6) then
+						local score = d + ang * 17
+						if score < bs then
+							best, bs = m, score
+						end
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function findProp(root: BasePart)
+	local props = workspace:FindFirstChild("City") and workspace.City:FindFirstChild("Props")
+	if not props then
+		return nil
+	end
+	local best, bd = nil, 8
+	for _, m in ipairs(props:GetChildren()) do
+		if m:GetAttribute("Interact") then
+			local p = m:GetPivot().Position
+			local d = ((p - root.Position) * Vector3.new(1, 0, 1)).Magnitude
+			if d < bd then
+				best, bd = m, d
+			end
+		end
+	end
+	return best
+end
+
+local roofT = 0
+local function updateRoofs(root: BasePart?)
+	local city = workspace:FindFirstChild("City")
+	local buildings = city and city:FindFirstChild("Buildings")
+	if not buildings then
+		return
+	end
+	for _, b in ipairs(buildings:GetChildren()) do
+		local roof = b:FindFirstChild("Roof")
+		if roof then
+			local inside = false
+			if root then
+				local center, size = b:GetAttribute("Center"), b:GetAttribute("Size")
+				if center and size then
+					local d = root.Position - center
+					inside = math.abs(d.X) < size.X / 2 + 1 and math.abs(d.Z) < size.Z / 2 + 1
+				end
+			end
+			roof.LocalTransparencyModifier = if inside then 0.92 else 0
+		end
+	end
+end
+
+local skillT = 0
+local scanT = 0
+RunService.RenderStepped:Connect(function()
+	local playing = player:GetAttribute("Playing") == true
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+
+	if abilityHeld and playing then
+		fireAbility()
+	end
+
+	local t = os.clock()
+	if t - scanT > 0.1 then
+		scanT = t
+		-- 빙의 대상
+		local target = if playing and root then findTarget(root) else nil
+		highlight.Adornee = target
+		highlight.Enabled = target ~= nil
+
+		-- 상호작용
+		local isHost = (player:GetAttribute("BodyType") or "ghost") ~= "ghost"
+		currentProp = if playing and root and isHost then findProp(root) else nil
+		interactButton.Visible = currentProp ~= nil
+		if currentProp then
+			interactButton.Text = currentProp:GetAttribute("Interact") .. (if UserInputService.TouchEnabled then "" else " [F]")
+		end
+	end
+
+	-- 스킬 쿨다운
+	if t - skillT > 0.1 then
+		skillT = t
+		local readyAt = player:GetAttribute("SkillReadyAt") or 0
+		local left = readyAt - workspace:GetServerTimeNow()
+		local name = player:GetAttribute("SkillName") or "스킬"
+		if left > 0 then
+			skillButton.Text = `{name}\n{math.ceil(left)}초`
+			skillButton.BackgroundColor3 = Color3.fromRGB(120, 140, 150)
+		else
+			skillButton.Text = name .. (if UserInputService.TouchEnabled then "" else " [Q]")
+			skillButton.BackgroundColor3 = C.Blue
+		end
+	end
+
+	-- 지붕 숨기기 (0.15초마다)
+	if t - roofT > 0.15 then
+		roofT = t
+		updateRoofs(if playing then root else nil)
+	end
+
+	-- 미션 위치
+	local hint = player:GetAttribute("Hint")
+	if playing and typeof(hint) == "Vector3" then
+		hintPart.CFrame = CFrame.new(hint)
+		hintGui.Enabled = true
+	else
+		hintGui.Enabled = false
+	end
+end)
+
+workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(updateScales)
+if workspace.CurrentCamera then
+	workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateScales)
+end
+updateScales()
+]]></ProtectedString></Properties></Item>
+</Item>
+</Item>
+</Item>
+</roblox>
