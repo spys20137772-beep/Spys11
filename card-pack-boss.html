@@ -378,7 +378,8 @@ const sfx = {
   sss() { [523, 659, 784, 1047, 1319, 1568, 2093].forEach((f, i) => beep(f, .35, 'triangle', .16, i * .09)); beep(130, 1.2, 'sawtooth', .12, 0, 60); },
   hire() { beep(330, .1, 'square', .1); beep(494, .1, 'square', .1, .09); beep(659, .18, 'square', .1, .18); },
   staff() { beep(880, .05, 'triangle', .04); },
-  nope() { beep(160, .15, 'sawtooth', .1); }
+  nope() { beep(160, .15, 'sawtooth', .1); },
+  land(k) { beep(620 + k * 90, .07, 'triangle', .08); }
 };
 
 // ---- 가루/흔들림/번쩍 ----
@@ -429,7 +430,7 @@ function makeCard(c, idx) {
   d.style.animationDelay = (idx * 0.07) + 's';
   d.innerHTML = '<div class="in"><div class="bk' + (g >= 4 ? ' glow g' + g : '') + '"><img src="' + IMG.emblem + '" alt="" onerror="this.outerHTML=\'⭐\'"></div>' +
     '<div class="fc"><span class="gr">' + GRADES[g] + '</span><span class="tag" style="display:none"></span>' + artHtml(c.id) + '<span class="nm">' + CARDS[c.id][2] + '</span></div></div>';
-  d.addEventListener('click', () => { audio(); if (G.reveal) flipCard(idx); });
+  d.addEventListener('click', () => { audio(); if (!G.reveal) return; if (hasHidden()) flipCard(idx); else collectCards(); });
   return d;
 }
 
@@ -471,10 +472,48 @@ function doBuy(i) {
   sfx.nope(); const e = pkEls[i]; e.animate([{ transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 200 });
 }
 
+// ---- 다 본 카드가 내 카드로 날아가는 연출 ----
+let collectTimer = 0;
+// 마지막 카드를 뒤집고 잠깐 보여준 뒤 거둔다
+function scheduleCollect(ms) {
+  clearTimeout(collectTimer); const rv = G.reveal;
+  collectTimer = setTimeout(() => { if (G.reveal === rv && !hasHidden()) collectCards(); }, ms);
+}
+// 펼쳐진 카드를 지금 바로 내 카드로 보낸다
+function collectCards() {
+  clearTimeout(collectTimer);
+  const box = $('#cards'), els = [...box.children]; if (!els.length) return;
+  flyToInv(els); box.innerHTML = ''; G.reveal = null; updateUI();
+}
+// 카드 복제본을 🎒 탭까지 날린다(살짝 떠올랐다가 빨려 들어감)
+function flyToInv(els) {
+  const tb = $('#tabbar [data-tab=inv]').getBoundingClientRect(), tx = tb.left + tb.width / 2, ty = tb.top + tb.height / 2;
+  const list = els.map(el => [el, el.getBoundingClientRect()]).filter(([, r]) => r.width);
+  list.forEach(([el, r], k) => {
+    const c = el.cloneNode(true);
+    c.style.cssText = 'position:fixed;left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height + 'px;--cw:' + r.width + 'px;margin:0;z-index:26;pointer-events:none;animation:none';
+    document.body.appendChild(c);
+    const dx = tx - (r.left + r.width / 2), dy = ty - (r.top + r.height / 2), rot = (k - (list.length - 1) / 2);
+    const a = c.animate([
+      { transform: 'translate(0,0) scale(1) rotate(0deg)', opacity: 1 },
+      { transform: 'translate(' + dx * .08 + 'px,' + (dy * .08 - 36) + 'px) scale(1.08) rotate(' + rot * 5 + 'deg)', opacity: 1, offset: .3 },
+      { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(.12) rotate(' + rot * 30 + 'deg)', opacity: .5 }
+    ], { duration: 700, delay: k * 90, easing: 'ease-in', fill: 'both' });
+    a.onfinish = () => { c.remove(); landInv(k, k === list.length - 1 ? list.length : 0); };
+  });
+}
+// 카드가 탭에 도착: 통통 튀고 반짝
+function landInv(k, total) {
+  const b = $('#tabbar [data-tab=inv]'), r = b.getBoundingClientRect();
+  b.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.18)' }, { transform: 'scale(1)' }], { duration: 220 });
+  sfx.land(k); burst(r.left + r.width / 2, r.top + 10, '#ffd23c', 6, 160);
+  if (total) floatText(r.left + r.width / 2 - 24, r.top - 24, '+' + total + '장');
+}
+
 // ---- 이벤트(핵심 규칙 -> 화면) ----
 hooks.emit = function (t, d) {
   if (t === 'open') {
-    const box = $('#cards'); box.innerHTML = ''; $('#idlepack').style.display = 'none';
+    const box = $('#cards'); clearTimeout(collectTimer); if (box.children.length) flyToInv([...box.children]); box.innerHTML = ''; $('#idlepack').style.display = 'none';
     d.cards.forEach((c, i) => box.appendChild(makeCard(c, i)));
     $('#flipall').style.display = 'inline-block'; sfx.buy();
     const r = box.getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2, CONFIG.PACKS[d.tier].color, 18, 260);
@@ -487,6 +526,7 @@ hooks.emit = function (t, d) {
     if (!c.isNew) seenDup = true;
     invDirty = dexDirty = true;
     firstFlip = true;
+    if (!d.auto && !hasHidden()) scheduleCollect(g >= 5 ? 1800 : 1000);
     if (d.auto) { if (g >= 4) burst(x, y, gcolor(g), 10, 200); return; }
     sfx.flip(g);
     if (c.isNew) setTimeout(sfx.isnew, 120);
