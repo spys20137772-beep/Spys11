@@ -13,14 +13,14 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 #app{position:relative;max-width:1100px;min-height:100%;margin:0 auto;padding:8px 8px 84px;display:flex;flex-direction:column;gap:8px}
 .pane{display:none}
 #pcart.on{display:grid;gap:8px;grid-template-columns:1fr 330px;grid-template-rows:minmax(330px,1fr) auto;grid-template-areas:"stage staff" "buy staff"}
-#pinv.on,#pdex.on{display:flex;flex-direction:column;gap:10px;background:var(--panel);border-radius:14px;padding:12px}
-@media (min-width:821px){html,body{overflow:hidden}#app{height:100%}.pane.on{flex:1;min-height:0}#pcart.on{grid-template-rows:minmax(0,1fr) auto}#staffbox{overflow:auto}#pinv.on,#pdex.on{overflow:auto}}
+#pinv.on,#pdex.on,#pplace.on{display:flex;flex-direction:column;gap:10px;background:var(--panel);border-radius:14px;padding:12px}
+@media (min-width:821px){html,body{overflow:hidden}#app{height:100%}.pane.on{flex:1;min-height:0}#pcart.on{grid-template-rows:minmax(0,1fr) auto}#staffbox{overflow:auto}#pinv.on,#pdex.on,#pplace.on{overflow:auto}}
 @media (max-width:820px){#pcart.on{grid-template-columns:1fr;grid-template-rows:auto;grid-template-areas:"stage" "buy" "staff"}}
 #tabbar{position:fixed;left:0;right:0;bottom:0;z-index:12;display:flex;justify-content:center;gap:6px;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:#1a1338f0;border-top:2px solid var(--panel2)}
 #tabbar button{flex:1;max-width:260px;border:0;border-radius:12px;background:transparent;padding:5px;font-size:22px;display:flex;flex-direction:column;align-items:center;gap:1px;position:relative;opacity:.65}
 #tabbar button span{font-size:14px;font-weight:800}
 #tabbar button.on{background:var(--panel2);opacity:1;color:var(--gold)}
-#tabbar b{position:absolute;top:2px;left:calc(50% + 12px);background:#ff3b5c;color:#fff;font-size:12px;border-radius:9px;padding:0 6px;line-height:18px}
+#tabbar b{position:absolute;top:2px;left:calc(50% + 8px);white-space:nowrap;background:#ff3b5c;color:#fff;font-size:12px;border-radius:9px;padding:0 6px;line-height:18px}
 #tabbar b:empty{display:none}
 .phead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .phead h2{margin:0;font-size:22px;color:var(--gold);flex:1}
@@ -44,6 +44,20 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .ic button.s1{background:#ffb02e;color:#3a2300}
 .ic button[hidden]{display:none}
 #invempty{opacity:.6;text-align:center;padding:30px;font-size:17px}
+#income{font-size:15px;font-weight:800;color:#57e0a0}
+.ic .st{font-size:12px;font-weight:800;opacity:.8}
+.card .fc .st{font-size:clamp(9px,calc(var(--cw)*.13),13px);font-weight:900;color:#b07800}
+#pslots{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+@media (max-width:600px){#pslots{grid-template-columns:repeat(3,1fr)}}
+.ps.empty{border:3px dashed #5f5493;background:#1b1440;color:#8a80c0;justify-content:center;min-height:170px}
+.ps .art{font-size:40px}
+.ps .pb{width:100%;height:8px;border-radius:5px;background:#0002;overflow:hidden}
+.ps .pb i{display:block;height:100%;background:#2fa06b;width:0}
+.ps .sub{font-size:13px;font-weight:900;color:#1d7a4c}
+.ps.empty .sub{color:#8a80c0;font-weight:700}
+.sub2{margin:4px 0 0;font-size:17px;color:var(--gold)}
+#picklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+#pickempty{opacity:.6;text-align:center;padding:20px;font-size:16px}
 #dexgrid{display:flex;flex-direction:column;gap:8px;align-items:center}
 .shake{animation:shake .45s}
 @keyframes shake{0%,100%{transform:translate(0)}15%{transform:translate(calc(var(--sh,6px)*-1),var(--sh,6px))}35%{transform:translate(var(--sh,6px),calc(var(--sh,6px)*-1))}55%{transform:translate(calc(var(--sh,6px)*-.7),calc(var(--sh,6px)*-.5))}75%{transform:translate(calc(var(--sh,6px)*.5),calc(var(--sh,6px)*.5))}}
@@ -143,7 +157,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 <div id="app">
   <div id="top">
     <span class="title">🃏 카드팩 대장</span>
-    <span id="coins">🪙 0</span>
+    <span id="coins">🪙 0</span><span id="income"></span>
     <div id="dexbar"><span id="dexn">📖 0/36</span><div class="bar"><i id="dexfill"></i></div></div>
     <span id="time">⏱ 0:00</span>
   </div>
@@ -168,6 +182,14 @@ button{font-family:inherit;color:inherit;cursor:pointer}
     <div id="invgrid"></div>
     <div id="invempty">아직 카드가 없어요. 🛒 카트에서 팩을 뜯어봐!</div>
   </div>
+  <div id="pplace" class="pane">
+    <div class="phead"><h2>🪟 배치 <small id="placesum"></small></h2></div>
+    <p class="note">카드를 최대 5장 놓으면 10초마다 코인을 벌어요. 카드마다 버는 양이 달라요(등급과 별★이 높을수록 많이).</p>
+    <div id="pslots"></div>
+    <h3 class="sub2">🎒 내 카드에서 고르기 (많이 버는 순)</h3>
+    <div id="picklist"></div>
+    <div id="pickempty">놓을 카드가 없어요. 🛒 카트에서 팩을 뜯어봐!</div>
+  </div>
   <div id="pdex" class="pane">
     <div class="phead"><h2 id="dextitle">📖 도감</h2></div>
     <div id="dexgrid"></div>
@@ -176,6 +198,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 <nav id="tabbar">
   <button data-tab="cart" class="on">🛒<span>카트</span></button>
   <button data-tab="inv">🎒<span>내 카드</span><b id="invbadge"></b></button>
+  <button data-tab="place">🪟<span>배치</span><b id="placebadge"></b></button>
   <button data-tab="dex">📖<span>도감</span></button>
 </nav>
 <canvas id="fx"></canvas>
@@ -211,21 +234,25 @@ const CONFIG = {
   SELL_PRICE: [1, 2, 3, 5, 12, 30, 90, 300], // 내 카드 1장을 팔면 받는 코인(등급별)
   STAFF_BASE_COST: 60,    // 첫 직원 값
   STAFF_COST_GROWTH: 1.45, // 직원을 고용할 때마다 값이 몇 배가 되는지
+  PLACE_MAX: 5,           // 배치할 수 있는 카드 수
+  PLACE_SEC: 10,          // 배치한 카드가 코인을 주는 간격(초)
+  PLACE_BASE: [3, 5, 8, 13, 22, 40, 80, 200], // 배치 수입: 등급별 기본 분당 코인(별 1개 기준)
+  PLACE_STAR: 0.12,       // 별 1개가 늘 때마다 배치 수입 +12%
   STAFF_MAX: 8,           // 직원 최대 수
   STAFF_SEC: 8,           // 직원 한 명이 동 팩을 까는 간격(초)
   PITY: 0.05              // SSS가 안 나온 팩이 쌓일 때마다 SSS 확률이 (1 + 쌓인 팩 x 이 값)배로 커짐
 };
 const GRADES = ['D', 'C', 'B', 'A', 'R', 'S', 'SSR', 'SSS'];
-// 카드 36장: [등급번호, 이모지, 이름]
+// 카드 36장: [등급번호, 이모지, 이름, 별(1~10, 같은 등급 안의 2차 등급)]
 const CARDS = [
-  [0,'🐭','생쥐'],[0,'🐔','닭'],[0,'🐟','물고기'],[0,'🐸','개구리'],[0,'🐛','애벌레'],[0,'🐝','꿀벌'],[0,'🐌','달팽이'],[0,'🐜','개미'],
-  [1,'🐶','강아지'],[1,'🐱','고양이'],[1,'🐰','토끼'],[1,'🐼','판다'],[1,'🐷','돼지'],[1,'🐮','소'],[1,'🐑','양'],
-  [2,'🦊','여우'],[2,'🐻','곰'],[2,'🐧','펭귄'],[2,'🦆','오리'],[2,'🦉','부엉이'],[2,'🐢','거북이'],
-  [3,'🦁','사자'],[3,'🐯','호랑이'],[3,'🐺','늑대'],[3,'🦈','상어'],[3,'🐙','문어'],
-  [4,'🐘','코끼리'],[4,'🦒','기린'],[4,'🦜','앵무새'],[4,'🦩','홍학'],
-  [5,'🐋','고래'],[5,'🦚','공작'],[5,'🦅','독수리'],
-  [6,'🦄','유니콘'],[6,'🦖','티라노'],
-  [7,'🐉','황금용']
+  [0,'🐭','생쥐',2],[0,'🐔','닭',4],[0,'🐟','물고기',3],[0,'🐸','개구리',5],[0,'🐛','애벌레',1],[0,'🐝','꿀벌',7],[0,'🐌','달팽이',6],[0,'🐜','개미',8],
+  [1,'🐶','강아지',6],[1,'🐱','고양이',7],[1,'🐰','토끼',4],[1,'🐼','판다',9],[1,'🐷','돼지',3],[1,'🐮','소',5],[1,'🐑','양',2],
+  [2,'🦊','여우',6],[2,'🐻','곰',8],[2,'🐧','펭귄',5],[2,'🦆','오리',2],[2,'🦉','부엉이',7],[2,'🐢','거북이',4],
+  [3,'🦁','사자',9],[3,'🐯','호랑이',8],[3,'🐺','늑대',6],[3,'🦈','상어',7],[3,'🐙','문어',4],
+  [4,'🐘','코끼리',6],[4,'🦒','기린',5],[4,'🦜','앵무새',3],[4,'🦩','홍학',7],
+  [5,'🐋','고래',8],[5,'🦚','공작',5],[5,'🦅','독수리',7],
+  [6,'🦄','유니콘',9],[6,'🦖','티라노',8],
+  [7,'🐉','황금용',10]
 ];
 let RNG = Math.random;           // 테스트에서 바꿔 끼울 수 있는 난수
 let G = null;                    // 지금 판의 상태
@@ -234,7 +261,7 @@ function emit(t, d) { hooks.emit(t, d); }
 
 // 새 판을 시작한다
 function newGame() {
-  G = { coins: CONFIG.START_COINS, owned: {}, seen: {}, count: 0, sold: 0, packs: 0, t: 0, free: 0, staff: [],
+  G = { coins: CONFIG.START_COINS, owned: {}, seen: {}, count: 0, sold: 0, placed: [], earned: 0, packs: 0, t: 0, free: 0, staff: [],
         reveal: null, won: false, winT: 0, lastTier: 0, dups: 0, dry: 0 };
 }
 // 직원 n+1번째를 고용하는 값
@@ -281,6 +308,18 @@ function sellDups() {
   for (const k in G.owned) { const x = G.owned[k] - 1; if (x > 0) { tot += CONFIG.SELL_PRICE[CARDS[k][0]] * x; n += x; G.owned[k] = 1; } }
   if (!n) return 0;
   G.coins += tot; G.sold += n; emit('sell', { n, coins: tot }); return tot;
+}
+// 카드 한 장을 배치했을 때 분당 버는 코인(카드마다 다름: 등급 기본값 x 별 보너스)
+function placeRate(id) { const c = CARDS[id]; return Math.round(CONFIG.PLACE_BASE[c[0]] * (1 + (c[3] - 1) * CONFIG.PLACE_STAR)); }
+// 내 카드 1장을 배치한다(내 카드에서 빠짐)
+function place(id) {
+  if (G.placed.length >= CONFIG.PLACE_MAX || !(G.owned[id] >= 1)) return false;
+  G.owned[id]--; G.placed.push({ id, t: CONFIG.PLACE_SEC, acc: 0 }); emit('place', { id }); return true;
+}
+// i번째 배치 카드를 내린다(내 카드로 돌아감)
+function unplace(i) {
+  const p = G.placed[i]; if (!p) return false;
+  G.placed.splice(i, 1); G.owned[p.id] = (G.owned[p.id] || 0) + 1; emit('place', {}); return true;
 }
 // 중복 카드 수와 팔면 받는 코인
 function dupInfo() {
@@ -333,6 +372,10 @@ function tick(dt) {
   if (G.won) return;
   G.t += dt;
   if (G.free > 0) G.free = Math.max(0, G.free - dt);
+  for (let i = 0; i < G.placed.length; i++) {
+    const p = G.placed[i]; p.acc += placeRate(p.id) / 60 * dt; p.t -= dt;
+    while (p.t <= 0) { p.t += CONFIG.PLACE_SEC; const pay = Math.floor(p.acc); p.acc -= pay; if (pay) { G.coins += pay; G.earned += pay; emit('earn', { i, pay }); } }
+  }
   for (let si = 0; si < G.staff.length; si++) {
     const s = G.staff[si]; s.timer -= dt;
     while (s.timer <= 0) {
@@ -355,7 +398,7 @@ const BESTKEY = 'cardpack_best_v1';
 let best = 0; try { best = +localStorage.getItem(BESTKEY) || 0; } catch (e) {}
 let screen = 'title';           // title / play / result
 let seenDup = false, firstFlip = false;
-let tab = 'cart', invDirty = true, dexDirty = true, invFilter = -1, invOrder = '';
+let tab = 'cart', invDirty = true, dexDirty = true, placeDirty = true, invFilter = -1, invOrder = '';
 const gcls = g => 'g' + g;
 
 // ---- 소리(WebAudio) ----
@@ -429,7 +472,7 @@ function makeCard(c, idx) {
   d.className = 'card ' + gcls(g) + (g === 7 ? ' sssc' : '');
   d.style.animationDelay = (idx * 0.07) + 's';
   d.innerHTML = '<div class="in"><div class="bk' + (g >= 4 ? ' glow g' + g : '') + '"><img src="' + IMG.emblem + '" alt="" onerror="this.outerHTML=\'⭐\'"></div>' +
-    '<div class="fc"><span class="gr">' + GRADES[g] + '</span><span class="tag" style="display:none"></span>' + artHtml(c.id) + '<span class="nm">' + CARDS[c.id][2] + '</span></div></div>';
+    '<div class="fc"><span class="gr">' + GRADES[g] + '</span><span class="tag" style="display:none"></span>' + artHtml(c.id) + '<span class="nm">' + CARDS[c.id][2] + '</span><span class="st">' + '★' + CARDS[c.id][3] + '</span></div></div>';
   d.addEventListener('click', () => { audio(); if (!G.reveal) return; if (hasHidden()) flipCard(idx); else collectCards(); });
   return d;
 }
@@ -524,7 +567,7 @@ hooks.emit = function (t, d) {
     if (c.isNew) { tag.style.display = ''; tag.textContent = 'NEW'; } else { tag.style.display = ''; tag.className = 'tag coin'; tag.textContent = '×' + c.n; }
     const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
     if (!c.isNew) seenDup = true;
-    invDirty = dexDirty = true;
+    invDirty = dexDirty = placeDirty = true;
     firstFlip = true;
     if (!d.auto && !hasHidden()) scheduleCollect(g >= 5 ? 1800 : 1000);
     if (d.auto) { if (g >= 4) burst(x, y, gcolor(g), 10, 200); return; }
@@ -536,7 +579,7 @@ hooks.emit = function (t, d) {
     if (g === 6) { burst(x, y, gcolor(g), 90, 520); shake(14); flash(.5, 700); setTimeout(() => sfx.rare(g), 150); banner('SSR!!', gcolor(g)); }
     if (g === 7) { burst(x, y, 'rain', 160, 650); shake(22); flash(.9, 1200); setTimeout(sfx.sss, 150); banner('✨ SSS ✨', '#ffe17a'); }
   } else if (t === 'staff') {
-    showStaffCards(d.si, d.ids); sfx.staff(); invDirty = dexDirty = true;
+    showStaffCards(d.si, d.ids); sfx.staff(); invDirty = dexDirty = placeDirty = true;
     const best = Math.max(...d.ids.map(id => CARDS[id][0]));
     const bi = d.ids.find(id => CARDS[id][0] === best), isNew = d.res[d.ids.indexOf(bi)].isNew;
     if (best >= 5) { toast('👷 직원이 ' + GRADES[best] + ' ' + CARDS[bi][1] + ' ' + CARDS[bi][2] + (isNew ? ' (NEW!)' : '') + ' 뽑음!', best); sfx.rare(best); if (best >= 6) flash(.25, 500); }
@@ -544,9 +587,14 @@ hooks.emit = function (t, d) {
   } else if (t === 'hire') {
     fillSlot(d.n - 1); sfx.hire(); const r = slotEls[d.n - 1].getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2, '#57e0a0', 24, 260);
   } else if (t === 'sell') {
-    invDirty = true; sfx.coin();
+    invDirty = placeDirty = true; sfx.coin();
     const co = $('#coins'); co.classList.remove('bump'); void co.offsetWidth; co.classList.add('bump');
     const r = co.getBoundingClientRect(); floatText(r.left + 20, r.bottom, '+' + d.coins + '🪙');
+  } else if (t === 'place') {
+    invDirty = placeDirty = true; sfx.land(2);
+  } else if (t === 'earn') {
+    const co = $('#coins'); co.classList.remove('bump'); void co.offsetWidth; co.classList.add('bump');
+    if (tab === 'place' && placeEls[d.i]) { const r = placeEls[d.i].getBoundingClientRect(); floatText(r.left + r.width / 2 - 20, r.top + 20, '+' + d.pay + '🪙'); }
   } else if (t === 'won') {
     setTimeout(showResult, 1600);
   }
@@ -558,6 +606,7 @@ const fmtT = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart
 function hintText() {
   if (G.packs === 0) return '팩을 눌러 뜯어봐! (1번 키)';
   if (hasHidden()) return '카드를 눌러 뒤집어! (스페이스)';
+  if (G.placed.length === 0 && G.packs >= 2) return '🪟 배치에 카드를 놓으면 계속 코인을 벌어! (B)';
   if (G.staff.length === 0 && G.coins >= staffCost()) return '코인으로 직원을 고용하면 알아서 팩을 까줘! (H)';
   const di = dupInfo();
   if (G.sold === 0 && di.n > 0) return '뽑은 카드는 🎒 내 카드에 쌓여! 중복을 팔면 +' + di.c + '🪙';
@@ -591,14 +640,20 @@ function updateUI() {
   $('#invbadge').textContent = di.n ? '+' + di.c + '🪙' : '';
   if (tab === 'inv' && invDirty) renderInv(di);
   if (tab === 'dex' && dexDirty) renderDex();
+  if (tab === 'place') {
+    if (placeDirty) renderPlace();
+    G.placed.forEach((p, i) => { const b = placeEls[i] && placeEls[i].querySelector('.pb i'); if (b) b.style.width = (100 - p.t / CONFIG.PLACE_SEC * 100) + '%'; });
+  }
+  $('#placebadge').textContent = G.placed.length ? G.placed.length + '/' + CONFIG.PLACE_MAX : '';
+  const inc = G.placed.reduce((a, p) => a + placeRate(p.id), 0); $('#income').textContent = inc ? '+' + inc + '/분' : '';
 }
 // 탭 바꾸기: cart / inv / dex
 function setTab(t) {
   if (t !== 'cart' && screen !== 'play') t = 'cart';
   tab = t;
-  ['cart', 'inv', 'dex'].forEach(k => $('#p' + k).classList.toggle('on', k === t));
+  ['cart', 'inv', 'place', 'dex'].forEach(k => $('#p' + k).classList.toggle('on', k === t));
   document.querySelectorAll('#tabbar button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
-  invDirty = dexDirty = true; if (G) updateUI();
+  invDirty = dexDirty = placeDirty = true; if (G) updateUI();
 }
 // 내 카드 화면 그리기(바뀐 칸만 고쳐서 누르는 중인 버튼이 사라지지 않게)
 const invCells = {};
@@ -625,7 +680,7 @@ function renderInv(di) {
     if (!e) {
       const g = CARDS[id][0], p = CONFIG.SELL_PRICE[g];
       e = invCells[id] = document.createElement('div'); e.className = 'ic ' + gcls(g) + (g === 7 ? ' sssc' : '');
-      e.innerHTML = '<span class="gr">' + GRADES[g] + '</span><span class="n"></span><div class="art">' + invArt(id) + '</div><div class="nm">' + CARDS[id][2] + '</div>' +
+      e.innerHTML = '<span class="gr">' + GRADES[g] + '</span><span class="n"></span><div class="art">' + invArt(id) + '</div><div class="nm">' + CARDS[id][2] + '</div><div class="st">★' + CARDS[id][3] + ' · 배치 시 분당 ' + placeRate(id) + '🪙</div>' +
         '<button class="s1" data-act="one" data-id="' + id + '">1장 팔기 +' + p + '🪙</button><button data-act="dup" data-id="' + id + '"></button>';
     }
     const n = G.owned[id], p = CONFIG.SELL_PRICE[CARDS[id][0]];
@@ -635,6 +690,48 @@ function renderInv(di) {
   const key = show.join(',');
   if (key !== invOrder) { invOrder = key; show.forEach(id => grid.appendChild(invCells[id])); }
   $('#invempty').style.display = have.length ? 'none' : '';
+}
+// ---- 배치 화면 ----
+const placeEls = [], pickCells = {}; let pickOrder = '';
+// 배치 칸 5개 만들기
+function buildPlace() {
+  const box = $('#pslots'); box.innerHTML = ''; placeEls.length = 0;
+  for (let i = 0; i < CONFIG.PLACE_MAX; i++) { const d = document.createElement('div'); box.appendChild(d); placeEls.push(d); }
+  for (const k in pickCells) { pickCells[k].remove(); delete pickCells[k]; } pickOrder = ''; placeDirty = true;
+}
+// 배치 칸과 고르기 목록 그리기(바뀐 것만 고침)
+function renderPlace() {
+  placeDirty = false;
+  const full = G.placed.length >= CONFIG.PLACE_MAX;
+  placeEls.forEach((d, i) => {
+    const p = G.placed[i], key = p ? 'c' + p.id : 'e';
+    if (d.dataset.k === key) return; d.dataset.k = key;
+    if (!p) { d.className = 'ic ps empty'; d.innerHTML = '<div class="art">＋</div><div class="nm">빈 자리</div><div class="sub">아래에서 카드를 골라요</div>'; return; }
+    const g = CARDS[p.id][0];
+    d.className = 'ic ps ' + gcls(g) + (g === 7 ? ' sssc' : '');
+    d.innerHTML = '<span class="gr">' + GRADES[g] + '</span><span class="n">★' + CARDS[p.id][3] + '</span><div class="art">' + invArt(p.id) + '</div><div class="nm">' + CARDS[p.id][2] + '</div>' +
+      '<div class="sub">분당 +' + placeRate(p.id) + '🪙</div><div class="pb"><i></i></div><button data-act="un" data-i="' + i + '">내리기</button>';
+  });
+  const inc = G.placed.reduce((a, p) => a + placeRate(p.id), 0);
+  $('#placesum').textContent = '· ' + G.placed.length + '/' + CONFIG.PLACE_MAX + ' · 분당 총 ' + inc + '🪙 · 지금까지 ' + G.earned + '🪙';
+  const have = []; CARDS.forEach((c, id) => { if (G.owned[id] > 0) have.push(id); });
+  have.sort((a, b) => placeRate(b) - placeRate(a) || a - b);
+  const list = $('#picklist');
+  for (const k in pickCells) if (!have.includes(+k)) { pickCells[k].remove(); delete pickCells[k]; }
+  have.forEach(id => {
+    let e = pickCells[id];
+    if (!e) {
+      const g = CARDS[id][0];
+      e = pickCells[id] = document.createElement('div'); e.className = 'ic ' + gcls(g) + (g === 7 ? ' sssc' : '');
+      e.innerHTML = '<span class="gr">' + GRADES[g] + ' ★' + CARDS[id][3] + '</span><span class="n"></span><div class="art">' + invArt(id) + '</div><div class="nm">' + CARDS[id][2] + '</div>' +
+        '<div class="st">분당 +' + placeRate(id) + '🪙</div><button class="s1" data-act="put" data-id="' + id + '"></button>';
+    }
+    e.querySelector('.n').textContent = '×' + G.owned[id];
+    const b = e.querySelector('[data-act=put]'); b.textContent = full ? '자리 없음' : '놓기'; b.classList.toggle('s1', !full);
+  });
+  const key = have.join(',');
+  if (key !== pickOrder) { pickOrder = key; have.forEach(id => list.appendChild(pickCells[id])); }
+  $('#pickempty').style.display = have.length ? 'none' : '';
 }
 // 도감 창 그리기
 function renderDex() {
@@ -661,7 +758,7 @@ function showResult() {
 function startGame() {
   audio(); newGame(); buildSlots(); seenDup = false; firstFlip = false;
   $('#cards').innerHTML = ''; $('#idlepack').style.display = ''; $('#title').classList.remove('on'); $('#result').classList.remove('on');
-  for (const k in invCells) { invCells[k].remove(); delete invCells[k]; } invOrder = ''; invFilter = -1;
+  for (const k in invCells) { invCells[k].remove(); delete invCells[k]; } invOrder = ''; invFilter = -1; buildPlace();
   screen = 'play'; setTab('cart');
 }
 
@@ -669,6 +766,10 @@ function startGame() {
 $('#startbtn').addEventListener('click', startGame);
 $('#againbtn').addEventListener('click', startGame);
 $('#tabbar').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { audio(); setTab(b.dataset.tab); } });
+$('#pplace').addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return; audio();
+  if (b.dataset.act === 'un') unplace(+b.dataset.i); else if (!place(+b.dataset.id)) sfx.nope();
+});
 $('#selldups').addEventListener('click', () => { audio(); if (!sellDups()) sfx.nope(); });
 $('#invfilter').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { invFilter = +b.dataset.g; invDirty = true; updateUI(); } });
 $('#invgrid').addEventListener('click', e => {
@@ -695,6 +796,7 @@ addEventListener('keydown', e => {
   if (screen === 'result') { if (k === 'Enter' || k === ' ') { e.preventDefault(); startGame(); } return; }
   if (k === 'd' || k === 'D') { setTab(tab === 'dex' ? 'cart' : 'dex'); return; }
   if (k === 'i' || k === 'I') { setTab(tab === 'inv' ? 'cart' : 'inv'); return; }
+  if (k === 'b' || k === 'B') { setTab(tab === 'place' ? 'cart' : 'place'); return; }
   if (k === 'Escape') { setTab('cart'); return; }
   if (tab !== 'cart') return;
   if (k === '1' || k === '2' || k === '3') doBuy(+k - 1);
@@ -712,6 +814,7 @@ function demoStep(dt) {
   if (screen === 'title') { startGame(); return; }
   if (screen === 'result') { demoResT += 0.55; if (demoResT > 6) { demoResT = 0; startGame(); } return; }
   if (hasHidden()) { flipNext(); return; }
+  if (G.placed.length < CONFIG.PLACE_MAX) { const ids = CARDS.map((c, id) => id).filter(id => G.owned[id] > 0).sort((a, b) => placeRate(b) - placeRate(a)); if (ids.length) { place(ids[0]); return; } }
   if (dupInfo().c >= 15) { sellDups(); return; }
   if (G.staff.length < 4 && G.coins >= staffCost()) { doHire(); return; }
   if (G.coins >= CONFIG.PACKS[2].cost + 40) { doBuy(2); return; }
@@ -727,8 +830,8 @@ function frame() {
   try { if (screen === 'play') { tick(dt * (window.__FF || 1)); updateUI(); } fxStep(dt); demoStep(dt); }
   catch (e) { window.__err = String(e && e.stack || e); console.error(e); }
 }
-buildBuy(); newGame(); buildSlots(); updateUI();
-window.__game = { get G() { return G; }, CONFIG, CARDS, tick, buyPack, hire, sellCard, sellDups, dupInfo, setTab, flipCard, flipNext, newGame, staffCost, startGame, get screen() { return screen; } };
+buildBuy(); newGame(); buildSlots(); buildPlace(); updateUI();
+window.__game = { get G() { return G; }, CONFIG, CARDS, tick, buyPack, hire, place, unplace, placeRate, sellCard, sellDups, dupInfo, setTab, flipCard, flipNext, newGame, staffCost, startGame, get screen() { return screen; } };
 setInterval(frame, 33); // 화면 갱신 루프(33ms)
 window.addEventListener('error', e => { window.__err = (window.__err || '') + e.message + ' '; });
 </script>
