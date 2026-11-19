@@ -58,6 +58,20 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 .sub2{margin:4px 0 0;font-size:17px;color:var(--gold)}
 #picklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
 #pickempty{opacity:.6;text-align:center;padding:20px;font-size:16px}
+#evbar{display:none}
+#evbar.on{position:sticky;top:6px;z-index:11;box-shadow:0 4px 14px #0008;display:flex;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap;background:linear-gradient(90deg,#5b2bbf,#c43a8f);border-radius:12px;padding:6px 12px;font-size:16px;font-weight:900;text-align:center;animation:evin .4s}
+#evbar b{background:#0005;border-radius:8px;padding:1px 8px;font-size:14px}
+#evbar.thief{background:#b3122e;animation:evin .4s,thiefb .45s infinite alternate}
+#evbar #chase{border:0;background:#fff;color:#b3122e;font-size:18px;font-weight:900;border-radius:10px;padding:6px 14px;flex:1}
+@keyframes evin{from{transform:scale(.85);opacity:0}}
+@keyframes thiefb{to{box-shadow:0 0 18px 4px #ff3b5c}}
+.ic .cd{font-size:12px;font-weight:800;color:#5a4a8a}
+.ic.slab{box-shadow:inset 0 0 0 3px #7ad6ff,0 0 12px #7ad6ffaa}
+.ic.slab .n{background:#1f6fb8}
+.ic.grading{opacity:.6;filter:grayscale(.4)}
+.ic button.gb{background:#3b6fd6;color:#fff}
+.ic button.gb.off{opacity:.45}
+#result .btn{font-size:18px}
 #dexgrid{display:flex;flex-direction:column;gap:8px;align-items:center}
 .shake{animation:shake .45s}
 @keyframes shake{0%,100%{transform:translate(0)}15%{transform:translate(calc(var(--sh,6px)*-1),var(--sh,6px))}35%{transform:translate(var(--sh,6px),calc(var(--sh,6px)*-1))}55%{transform:translate(calc(var(--sh,6px)*-.7),calc(var(--sh,6px)*-.5))}75%{transform:translate(calc(var(--sh,6px)*.5),calc(var(--sh,6px)*.5))}}
@@ -161,6 +175,7 @@ button{font-family:inherit;color:inherit;cursor:pointer}
     <div id="dexbar"><span id="dexn">📖 0/36</span><div class="bar"><i id="dexfill"></i></div></div>
     <span id="time">⏱ 0:00</span>
   </div>
+  <div id="evbar"></div>
   <div id="pcart" class="pane on">
   <div id="stage">
     <img id="idlepack" alt="팩">
@@ -177,14 +192,14 @@ button{font-family:inherit;color:inherit;cursor:pointer}
   </div>
   <div id="pinv" class="pane">
     <div class="phead"><h2>🎒 내 카드 <small id="invsum"></small></h2><button class="btn" id="selldups">중복 모두 팔기</button></div>
-    <p class="note">뽑은 카드는 전부 여기 쌓여요. 팔아도 도감 기록은 남아요.</p>
+    <p class="note">뽑은 카드는 전부 여기 쌓여요. 팔아도 도감 기록은 남아요.<br>카드마다 숨은 상태 💎1~10이 있어요. 🔍 감정을 보내면(100🪙, 10분) 상태가 드러나고, 💎6부터는 더 비싸게 팔리고 배치하면 더 많이 벌어요.</p>
     <div id="invfilter"></div>
     <div id="invgrid"></div>
     <div id="invempty">아직 카드가 없어요. 🛒 카트에서 팩을 뜯어봐!</div>
   </div>
   <div id="pplace" class="pane">
     <div class="phead"><h2>🪟 배치 <small id="placesum"></small></h2></div>
-    <p class="note">카드를 최대 5장 놓으면 10초마다 코인을 벌어요. 카드마다 버는 양이 달라요(등급과 별★이 높을수록 많이).</p>
+    <p class="note">카드를 최대 5장 놓으면 10초마다 코인을 벌어요. 카드마다 버는 양이 달라요(등급과 별★이 높을수록 많이).<br>⚠️ 감정 안 된 카드는 배치해 두면 숨은 상태가 조금씩 닳아요. 감정된 카드는 케이스에 들어 있어 안 닳고, 상태가 좋으면 더 벌어요.</p>
     <div id="pslots"></div>
     <h3 class="sub2">🎒 내 카드에서 고르기 (많이 버는 순)</h3>
     <div id="picklist"></div>
@@ -214,7 +229,8 @@ button{font-family:inherit;color:inherit;cursor:pointer}
 <div class="ov" id="result">
   <h1>🎉 도감 완성!</h1>
   <p id="resinfo"></p>
-  <button class="big" id="againbtn">다시 하기</button>
+  <button class="big" id="contbtn">계속 하기</button>
+  <button class="btn" id="againbtn">새 게임</button>
 </div>
 
 <script>
@@ -238,6 +254,14 @@ const CONFIG = {
   PLACE_SEC: 10,          // 배치한 카드가 코인을 주는 간격(초)
   PLACE_BASE: [3, 5, 8, 13, 22, 40, 80, 200], // 배치 수입: 등급별 기본 분당 코인(별 1개 기준)
   PLACE_STAR: 0.12,       // 별 1개가 늘 때마다 배치 수입 +12%
+  COND_RATES: [1, 2, 4, 8, 14, 20, 22, 17, 9, 3], // 숨은 상태 💎1~10이 나올 가중치(뽑는 순간 정해짐, 💎10 = 3%)
+  COND_BONUS: 0.2,        // 감정된 상태가 💎6부터 1 오를 때마다 판매가·배치 수입 +20% (💎10 = 2배)
+  WEAR_PER_MIN: 0.3,      // 감정 안 된 카드를 배치하면 숨은 상태가 분당 이만큼 깎임
+  GRADE_COST: 100,        // 감정 비용
+  GRADE_SEC: 600,         // 감정에 걸리는 시간(게임 시간 10분)
+  EVENT_FIRST: 40,        // 첫 랜덤 이벤트까지(초)
+  EVENT_GAP: [50, 90],    // 다음 이벤트까지 걸리는 시간 범위(초)
+  THIEF_REWARD: 15,       // 도둑을 쫓아내면 받는 코인
   STAFF_MAX: 8,           // 직원 최대 수
   STAFF_SEC: 8,           // 직원 한 명이 동 팩을 까는 간격(초)
   PITY: 0.05              // SSS가 안 나온 팩이 쌓일 때마다 SSS 확률이 (1 + 쌓인 팩 x 이 값)배로 커짐
@@ -261,14 +285,19 @@ function emit(t, d) { hooks.emit(t, d); }
 
 // 새 판을 시작한다
 function newGame() {
-  G = { coins: CONFIG.START_COINS, owned: {}, seen: {}, count: 0, sold: 0, placed: [], earned: 0, packs: 0, t: 0, free: 0, staff: [],
-        reveal: null, won: false, winT: 0, lastTier: 0, dups: 0, dry: 0 };
+  G = { coins: CONFIG.START_COINS, hid: {}, slabs: [], grading: [], placed: [], seen: {}, count: 0, sold: 0, earned: 0, graded: 0,
+        packs: 0, t: 0, free: 0, staff: [], reveal: null, won: false, winT: 0, lastTier: 0, dups: 0, dry: 0, uid: 0,
+        ev: null, evNext: CONFIG.EVENT_FIRST };
 }
 // 직원 n+1번째를 고용하는 값
 function staffCost() { return Math.round(CONFIG.STAFF_BASE_COST * Math.pow(CONFIG.STAFF_COST_GROWTH, G.staff.length)); }
+// 지금 이 이벤트가 켜져 있나
+function evOn(k) { return !!(G.ev && G.ev.k === k); }
 // 가중치로 등급 하나를 뽑는다
 function rollGrade(tier) {
-  const r = CONFIG.PACKS[tier].rates.slice(); r[7] *= 1 + G.dry * CONFIG.PITY; let s = 0; for (const x of r) s += x;
+  const r = CONFIG.PACKS[tier].rates.slice(); r[7] *= 1 + G.dry * CONFIG.PITY;
+  if (evOn('luck')) { r[6] *= 2; r[7] *= 2; }
+  let s = 0; for (const x of r) s += x;
   let v = RNG() * s; for (let i = 0; i < r.length; i++) { v -= r[i]; if (v < 0) return i; }
   return r.length - 1;
 }
@@ -284,52 +313,137 @@ function rollPack(tier) {
   if (CARDS[ids[ids.length - 1]][0] === 7) G.dry = 0; else G.dry++;
   return ids;
 }
+
+// ---- 숨은 상태 💎1~10 ----
+// 내 카드는 3곳에 있음: hid(감정 전, 상태 숨김, 카드별 상태값 목록) / slabs(감정 완료) / grading(감정 중), 그리고 placed(배치)
+// 뽑는 순간 상태를 정한다(소수: 7.4면 💎7, 배치로 닳으면 줄어듦)
+function rollCond() {
+  const w = CONFIG.COND_RATES; let s = 0; for (const x of w) s += x;
+  let v = RNG() * s; for (let i = 0; i < w.length; i++) { v -= w[i]; if (v < 0) return i + 1 + RNG() * 0.99; }
+  return 10.5;
+}
+// 상태값 -> 보이는 상태 등급(1~10)
+function condLv(c) { return Math.max(1, Math.min(10, Math.floor(c))); }
+// 감정된 상태 등급의 판매·수입 배수
+function condMult(lv) { return lv <= 5 ? 1 : 1 + (lv - 5) * CONFIG.COND_BONUS; }
+// 감정 전 카드 수
+function rawCount(id) { return G.hid[id] ? G.hid[id].length : 0; }
+// 이 카드를 모두 몇 장 가지고 있나(어디에 있든)
+function held(id) { return rawCount(id) + [G.slabs, G.grading, G.placed].reduce((a, L) => a + L.filter(x => x.id === id).length, 0); }
+// 감정 전 카드 중 아무거나 한 장 꺼낸다(상태를 모르니 고를 수 없음)
+function takeRaw(id) { const L = G.hid[id]; if (!L || !L.length) return null; return L.splice(Math.floor(RNG() * L.length), 1)[0]; }
+function putRaw(id, c) { (G.hid[id] = G.hid[id] || []).push(c); }
+
 // 카드 한 장을 내 카드에 넣는다(처음 보는 카드면 도감에도 기록 = NEW)
 function applyCard(id) {
-  G.owned[id] = (G.owned[id] || 0) + 1;
+  putRaw(id, rollCond());
   if (!G.seen[id]) {
     G.seen[id] = true; G.count++;
     if (G.count >= CARDS.length && !G.won) { G.won = true; G.winT = G.t; emit('won', {}); }
-    return { isNew: true, n: G.owned[id] };
+    return { isNew: true, n: held(id) };
   }
   G.dups++;
-  return { isNew: false, n: G.owned[id] };
+  return { isNew: false, n: held(id) };
 }
-// 내 카드 n장을 판다(도감 기록은 남음). 성공하면 받은 코인
+// 판매가: 등급 기본값 x (감정됐으면 상태 배수) x (시세 폭등 이벤트면 3배)
+function sellPrice(id, lv) {
+  const g = CARDS[id][0]; let p = CONFIG.SELL_PRICE[g] * (lv ? condMult(lv) : 1);
+  if (evOn('sale') && G.ev.g === g) p *= 3;
+  return Math.round(p);
+}
+// 감정 전 카드 n장을 판다(도감 기록은 남음). 성공하면 받은 코인
 function sellCard(id, n) {
-  n = n || 1; if (!(G.owned[id] >= n) || n <= 0) return 0;
-  const c = CONFIG.SELL_PRICE[CARDS[id][0]] * n;
-  G.owned[id] -= n; G.coins += c; G.sold += n;
+  n = n || 1; if (n <= 0 || rawCount(id) < n) return 0;
+  for (let i = 0; i < n; i++) takeRaw(id);
+  const c = sellPrice(id) * n; G.coins += c; G.sold += n;
   emit('sell', { id, n, coins: c }); return c;
 }
-// 중복 카드(같은 카드 2장째부터)를 전부 판다
+// 감정된 카드 한 장을 판다
+function sellSlab(u) {
+  const i = G.slabs.findIndex(x => x.u === u); if (i < 0) return 0;
+  const s = G.slabs.splice(i, 1)[0], c = sellPrice(s.id, s.lv); G.coins += c; G.sold++;
+  emit('sell', { id: s.id, n: 1, coins: c }); return c;
+}
+// 감정 전 중복 카드를 1장씩만 남기고 판다(감정된 카드는 안 팜)
 function sellDups() {
   let tot = 0, n = 0;
-  for (const k in G.owned) { const x = G.owned[k] - 1; if (x > 0) { tot += CONFIG.SELL_PRICE[CARDS[k][0]] * x; n += x; G.owned[k] = 1; } }
+  for (const k in G.hid) { const x = G.hid[k].length - 1; if (x > 0) { tot += sellPrice(+k) * x; n += x; G.hid[k] = [takeRaw(+k)]; } }
   if (!n) return 0;
   G.coins += tot; G.sold += n; emit('sell', { n, coins: tot }); return tot;
-}
-// 카드 한 장을 배치했을 때 분당 버는 코인(카드마다 다름: 등급 기본값 x 별 보너스)
-function placeRate(id) { const c = CARDS[id]; return Math.round(CONFIG.PLACE_BASE[c[0]] * (1 + (c[3] - 1) * CONFIG.PLACE_STAR)); }
-// 내 카드 1장을 배치한다(내 카드에서 빠짐)
-function place(id) {
-  if (G.placed.length >= CONFIG.PLACE_MAX || !(G.owned[id] >= 1)) return false;
-  G.owned[id]--; G.placed.push({ id, t: CONFIG.PLACE_SEC, acc: 0 }); emit('place', { id }); return true;
-}
-// i번째 배치 카드를 내린다(내 카드로 돌아감)
-function unplace(i) {
-  const p = G.placed[i]; if (!p) return false;
-  G.placed.splice(i, 1); G.owned[p.id] = (G.owned[p.id] || 0) + 1; emit('place', {}); return true;
 }
 // 중복 카드 수와 팔면 받는 코인
 function dupInfo() {
   let n = 0, c = 0;
-  for (const k in G.owned) { const x = G.owned[k] - 1; if (x > 0) { n += x; c += CONFIG.SELL_PRICE[CARDS[k][0]] * x; } }
+  for (const k in G.hid) { const x = G.hid[k].length - 1; if (x > 0) { n += x; c += sellPrice(+k) * x; } }
   return { n, c };
 }
+
+// ---- 감정 ----
+function gradeCost() { return evOn('cheap') ? Math.round(CONFIG.GRADE_COST / 2) : CONFIG.GRADE_COST; }
+// 감정 전 카드 한 장을 감정 보낸다(게임 시간 10분 뒤 상태가 드러나서 돌아옴)
+function sendGrade(id) {
+  const cost = gradeCost(); if (G.coins < cost || !rawCount(id)) return false;
+  G.coins -= cost; G.grading.push({ u: ++G.uid, id, c: takeRaw(id), t: CONFIG.GRADE_SEC });
+  emit('grade', { id }); return true;
+}
+function finishGrade(i) {
+  const x = G.grading.splice(i, 1)[0], s = { u: x.u, id: x.id, lv: condLv(x.c) };
+  G.slabs.push(s); G.graded++; emit('graded', s);
+}
+
+// ---- 배치 ----
+// 카드 한 장을 배치했을 때 기본 분당 코인(카드마다 다름: 등급 기본값 x 별 보너스)
+function placeRate(id) { const c = CARDS[id]; return Math.round(CONFIG.PLACE_BASE[c[0]] * (1 + (c[3] - 1) * CONFIG.PLACE_STAR)); }
+// 실제 분당 코인(감정된 카드면 상태 배수, 손님 몰림 이벤트면 2배)
+function copyRate(p) { return Math.round(placeRate(p.id) * (p.lv ? condMult(p.lv) : 1) * (evOn('crowd') ? 2 : 1)); }
+// 감정 전 카드 1장을 배치한다(어떤 상태인지 모르는 한 장이 나감)
+function place(id) {
+  if (G.placed.length >= CONFIG.PLACE_MAX || !rawCount(id)) return false;
+  G.placed.push({ id, c: takeRaw(id), lv: 0, t: CONFIG.PLACE_SEC, acc: 0 }); emit('place', { id }); return true;
+}
+// 감정된 카드를 배치한다(케이스에 들어 있어 안 닳음)
+function placeSlab(u) {
+  if (G.placed.length >= CONFIG.PLACE_MAX) return false;
+  const i = G.slabs.findIndex(x => x.u === u); if (i < 0) return false;
+  const s = G.slabs.splice(i, 1)[0]; G.placed.push({ id: s.id, u: s.u, lv: s.lv, t: CONFIG.PLACE_SEC, acc: 0 }); emit('place', { id: s.id }); return true;
+}
+// i번째 배치 카드를 내린다(내 카드로 돌아감. 감정 전 카드는 닳은 채로 다른 카드와 섞임)
+function unplace(i) {
+  const p = G.placed[i]; if (!p) return false;
+  G.placed.splice(i, 1);
+  if (p.lv) G.slabs.push({ u: p.u, id: p.id, lv: p.lv }); else putRaw(p.id, p.c);
+  emit('place', {}); return true;
+}
+
+// ---- 랜덤 이벤트 ----
+const EVENTS = [
+  { k: 'luck',  sec: 30, name: '🍀 행운 타임', desc: 'SSR·SSS 확률 2배' },
+  { k: 'sale',  sec: 30, name: '📈 시세 폭등', desc: '{g} 등급 판매가 3배' },
+  { k: 'cheap', sec: 30, name: '🏷️ 감정 세일', desc: '감정비 반값' },
+  { k: 'rush',  sec: 0,  name: '⚡ 감정소 야근', desc: '감정 중인 카드 즉시 완료', need: () => G.grading.length > 0 },
+  { k: 'thief', sec: 8,  name: '🦹 도둑이야!', desc: '쫓아내지 않으면 배치 카드 1장 도난', need: () => G.placed.length > 0 },
+  { k: 'staff', sec: 30, name: '💪 직원 파이팅', desc: '직원 속도 2배', need: () => G.staff.length > 0 },
+  { k: 'crowd', sec: 30, name: '👥 손님 몰림', desc: '배치 수입 2배', need: () => G.placed.length > 0 }
+];
+// 이벤트 하나를 시작한다(k를 주면 그 이벤트, 아니면 지금 가능한 것 중 랜덤)
+function startEvent(k) {
+  const list = EVENTS.filter(e => (!k || e.k === k) && (!e.need || e.need())); if (!list.length) return false;
+  const e = list[Math.floor(RNG() * list.length)];
+  G.ev = { k: e.k, t: e.sec, g: e.k === 'sale' ? Math.floor(RNG() * 5) : -1 };
+  G.evNext = CONFIG.EVENT_GAP[0] + RNG() * (CONFIG.EVENT_GAP[1] - CONFIG.EVENT_GAP[0]);
+  emit('event', G.ev);
+  if (e.k === 'rush') { while (G.grading.length) finishGrade(0); G.ev = null; emit('evend', {}); }
+  return true;
+}
+function evText(ev) { const e = EVENTS.find(x => x.k === ev.k); return e.name + ' · ' + e.desc.replace('{g}', GRADES[ev.g]); }
+// 도둑을 쫓아낸다
+function chaseThief() {
+  if (!evOn('thief')) return false;
+  G.ev = null; G.coins += CONFIG.THIEF_REWARD; emit('caught', { coins: CONFIG.THIEF_REWARD }); return true;
+}
+
 // 팩을 산다(tier 0~2). 무료 동 팩이 있으면 먼저 쓴다. 성공하면 true
 function buyPack(tier) {
-  if (G.won) return false;
   const p = CONFIG.PACKS[tier]; const free = tier === 0 && G.free <= 0;
   if (!free && G.coins < p.cost) return false;
   finishReveal(true);
@@ -362,29 +476,38 @@ function finishReveal(auto) {
 function hasHidden() { return !!(G.reveal && G.reveal.cards.some(c => !c.flipped)); }
 // 직원을 고용한다
 function hire() {
-  if (G.won || G.staff.length >= CONFIG.STAFF_MAX) return false;
+  if (G.staff.length >= CONFIG.STAFF_MAX) return false;
   const c = staffCost(); if (G.coins < c) return false;
   G.coins -= c; G.staff.push({ timer: CONFIG.STAFF_SEC, last: [] });
   emit('hire', { n: G.staff.length }); return true;
 }
-// 시간을 dt초 흘린다(무료 팩 시간, 직원이 팩 까기)
+// 시간을 dt초 흘린다(이벤트, 감정, 배치 수입과 닳기, 무료 팩, 직원). 도감을 다 채워도 계속 흐름
 function tick(dt) {
-  if (G.won) return;
   G.t += dt;
   if (G.free > 0) G.free = Math.max(0, G.free - dt);
+  if (G.ev) {
+    G.ev.t -= dt;
+    if (G.ev.t <= 0) {
+      const k = G.ev.k; G.ev = null;
+      if (k === 'thief' && G.placed.length) emit('stolen', G.placed.splice(Math.floor(RNG() * G.placed.length), 1)[0]);
+      emit('evend', { k });
+    }
+  } else { G.evNext -= dt; if (G.evNext <= 0) startEvent(); }
+  for (let i = G.grading.length - 1; i >= 0; i--) { G.grading[i].t -= dt; if (G.grading[i].t <= 0) finishGrade(i); }
   for (let i = 0; i < G.placed.length; i++) {
-    const p = G.placed[i]; p.acc += placeRate(p.id) / 60 * dt; p.t -= dt;
+    const p = G.placed[i];
+    if (!p.lv) p.c = Math.max(1, p.c - CONFIG.WEAR_PER_MIN / 60 * dt);
+    p.acc += copyRate(p) / 60 * dt; p.t -= dt;
     while (p.t <= 0) { p.t += CONFIG.PLACE_SEC; const pay = Math.floor(p.acc); p.acc -= pay; if (pay) { G.coins += pay; G.earned += pay; emit('earn', { i, pay }); } }
   }
+  const sp = evOn('staff') ? 2 : 1;
   for (let si = 0; si < G.staff.length; si++) {
-    const s = G.staff[si]; s.timer -= dt;
+    const s = G.staff[si]; s.timer -= dt * sp;
     while (s.timer <= 0) {
       s.timer += CONFIG.STAFF_SEC; G.packs++;
       const ids = rollPack(0); const res = ids.map(applyCard); s.last = ids;
       emit('staff', { si, ids, res });
-      if (G.won) break;
     }
-    if (G.won) break;
   }
 }
 //#CORE_END
@@ -592,6 +715,25 @@ hooks.emit = function (t, d) {
     const r = co.getBoundingClientRect(); floatText(r.left + 20, r.bottom, '+' + d.coins + '🪙');
   } else if (t === 'place') {
     invDirty = placeDirty = true; sfx.land(2);
+  } else if (t === 'grade') {
+    invDirty = placeDirty = true; sfx.buy(); toast('🔍 감정 보냄: ' + CARDS[d.id][1] + ' ' + CARDS[d.id][2] + ' · 10분 뒤 돌아와요', CARDS[d.id][0]);
+  } else if (t === 'graded') {
+    invDirty = placeDirty = true; const g = CARDS[d.id][0];
+    toast('🔍 감정 완료! ' + CARDS[d.id][1] + ' ' + CARDS[d.id][2] + ' 💎' + d.lv + (d.lv > 5 ? ' (×' + condMult(d.lv).toFixed(1) + ')' : ''), d.lv >= 9 ? 7 : g);
+    if (d.lv >= 9) { banner('💎' + d.lv + '!', '#7ad6ff'); flash(.3, 500); setTimeout(() => sfx.rare(5), 100); } else sfx.isnew();
+  } else if (t === 'event') {
+    invDirty = placeDirty = true;
+    if (d.k === 'thief') { banner('🦹 도둑!', '#ff3b5c'); shake(8); sfx.nope(); }
+    else { banner(EVENTS.find(e => e.k === d.k).name, '#ff9ad5'); sfx.hire(); }
+    toast(evText(d), 6);
+  } else if (t === 'evend') {
+    invDirty = placeDirty = true;
+  } else if (t === 'stolen') {
+    invDirty = placeDirty = true; sfx.nope(); shake(10);
+    toast('🦹 도둑이 ' + CARDS[d.id][1] + ' ' + CARDS[d.id][2] + (d.lv ? ' 💎' + d.lv : '') + '을(를) 훔쳐 갔어요…', 0);
+  } else if (t === 'caught') {
+    sfx.coin(); toast('🦹 도둑을 쫓아냈다! +' + d.coins + '🪙', 6);
+    const r = $('#evbar').getBoundingClientRect(); burst(r.left + r.width / 2, r.top + r.height / 2, '#ffd23c', 30, 300);
   } else if (t === 'earn') {
     const co = $('#coins'); co.classList.remove('bump'); void co.offsetWidth; co.classList.add('bump');
     if (tab === 'place' && placeEls[d.i]) { const r = placeEls[d.i].getBoundingClientRect(); floatText(r.left + r.width / 2 - 20, r.top + 20, '+' + d.pay + '🪙'); }
@@ -613,6 +755,7 @@ function hintText() {
   if (G.dups === 0) return '또 나온 카드는 🎒 내 카드에 쌓여. 팔아서 코인을 벌자!';
   if (G.staff.length === 0 && G.coins + di.c >= staffCost()) return '🎒 내 카드에서 중복을 팔고 직원을 고용하자! (H)';
   if (G.staff.length === 0) return '직원 ' + staffCost() + '🪙 모으자! 또는 팩을 더 까자.';
+  if (!G.graded && !G.grading.length && G.coins >= gradeCost() && G.packs >= 4) return '🔍 내 카드에서 감정을 보내면 숨은 상태 💎가 드러나! 좋으면 돈을 더 벌어';
   if (G.coins >= CONFIG.PACKS[2].cost) return '금 팩이면 높은 등급이 잘 나와! (3번 키)';
   return '남은 카드 ' + (CARDS.length - G.count) + '장. 팩을 까거나 직원을 늘려봐!';
 }
@@ -622,7 +765,7 @@ function updateUI() {
   $('#coins').textContent = '🪙 ' + Math.floor(G.coins);
   $('#dexn').textContent = '📖 ' + G.count + '/' + CARDS.length;
   $('#dexfill').style.width = (G.count / CARDS.length * 100) + '%';
-  $('#time').textContent = '⏱ ' + fmtT(G.won ? G.winT : G.t);
+  $('#time').textContent = '⏱ ' + fmtT(G.t);
   CONFIG.PACKS.forEach((p, i) => {
     const e = pkEls[i], free = i === 0 && G.free <= 0;
     e.querySelector('.cost').textContent = free ? '🎁 무료!' : (i === 0 && G.free > 0 ? p.cost + '🪙 (무료 ' + Math.ceil(G.free) + '초)' : p.cost + '🪙');
@@ -636,16 +779,24 @@ function updateUI() {
   $('#hint').textContent = hintText();
   const hid = hasHidden(); $('#flipall').style.display = hid ? 'inline-block' : 'none';
   const ip = $('#idlepack'); if (!G.reveal) { ip.style.display = ''; } ip.className = 't' + G.lastTier;
-  const di = dupInfo();
-  $('#invbadge').textContent = di.n ? '+' + di.c + '🪙' : '';
-  if (tab === 'inv' && invDirty) renderInv(di);
+  const di = dupInfo(), now = performance.now();
+  $('#invbadge').textContent = di.n ? '+' + di.c + '🪙' : (G.grading.length ? '🔍' + G.grading.length : '');
+  if (tab === 'inv' && (invDirty || now - invRT > 500)) { invRT = now; renderInv(di); }
   if (tab === 'dex' && dexDirty) renderDex();
   if (tab === 'place') {
-    if (placeDirty) renderPlace();
+    if (placeDirty || now - placeRT > 500) { placeRT = now; renderPlace(); }
     G.placed.forEach((p, i) => { const b = placeEls[i] && placeEls[i].querySelector('.pb i'); if (b) b.style.width = (100 - p.t / CONFIG.PLACE_SEC * 100) + '%'; });
   }
   $('#placebadge').textContent = G.placed.length ? G.placed.length + '/' + CONFIG.PLACE_MAX : '';
-  const inc = G.placed.reduce((a, p) => a + placeRate(p.id), 0); $('#income').textContent = inc ? '+' + inc + '/분' : '';
+  const inc = G.placed.reduce((a, p) => a + copyRate(p), 0); $('#income').textContent = inc ? '+' + inc + '/분' : '';
+  const eb = $('#evbar');
+  if (G.ev) {
+    if (eb.dataset.k !== G.ev.k) {
+      eb.dataset.k = G.ev.k; eb.className = 'on' + (G.ev.k === 'thief' ? ' thief' : '');
+      eb.innerHTML = G.ev.k === 'thief' ? '<button id="chase">🦹 도둑이야! 눌러서 쫓아내기 (T)</button><b></b>' : '<span>🎲 ' + evText(G.ev) + '</span><b></b>';
+    }
+    eb.querySelector('b').textContent = Math.ceil(G.ev.t) + '초';
+  } else if (eb.dataset.k) { eb.dataset.k = ''; eb.className = ''; eb.innerHTML = ''; }
 }
 // 탭 바꾸기: cart / inv / dex
 function setTab(t) {
@@ -656,15 +807,27 @@ function setTab(t) {
   invDirty = dexDirty = placeDirty = true; if (G) updateUI();
 }
 // 내 카드 화면 그리기(바뀐 칸만 고쳐서 누르는 중인 버튼이 사라지지 않게)
-const invCells = {};
+// 감정 전 카드는 상태를 모르니 카드별로 묶고(×n), 감정 완료/감정 중 카드는 한 장씩 보여 줌
+const invCells = {}; let invRT = 0, placeRT = 0;
 function invArt(id) { const k = CARD_IMG[id]; return k && IMG[k] ? '<img src="' + IMG[k] + '" alt="">' : CARDS[id][1]; }
+function invEntries() {
+  const E = [];
+  CARDS.forEach((c, id) => { const n = rawCount(id); if (n) E.push({ k: 'r' + id, id, type: 0, n }); });
+  G.slabs.forEach(s => E.push({ k: 's' + s.u, id: s.id, type: 1, s }));
+  G.grading.forEach(x => E.push({ k: 'g' + x.u, id: x.id, type: 2, x }));
+  return E.sort((a, b) => CARDS[b.id][0] - CARDS[a.id][0] || a.id - b.id || a.type - b.type || ((b.s && b.s.lv) || 0) - ((a.s && a.s.lv) || 0));
+}
+function cardTop(id) {
+  const g = CARDS[id][0];
+  return '<span class="gr">' + GRADES[g] + ' ★' + CARDS[id][3] + '</span><span class="n"></span><div class="art">' + invArt(id) + '</div><div class="nm">' + CARDS[id][2] + '</div><div class="cd"></div>';
+}
 function renderInv(di) {
   invDirty = false; di = di || dupInfo();
-  let total = 0, val = 0; const have = [];
-  CARDS.forEach((c, id) => { const n = G.owned[id] || 0; if (!n) return; total += n; val += n * CONFIG.SELL_PRICE[c[0]]; have.push(id); });
-  $('#invsum').textContent = '· ' + total + '장 · 전부 팔면 ' + val + '🪙';
+  const E = invEntries(); let total = 0, val = 0;
+  E.forEach(e => { if (e.type === 0) { total += e.n; val += e.n * sellPrice(e.id); } else { total++; if (e.type === 1) val += sellPrice(e.id, e.s.lv); } });
+  $('#invsum').textContent = '· ' + total + '장 · 전부 팔면 ' + val + '🪙' + (G.grading.length ? ' · 🔍 감정 중 ' + G.grading.length + '장' : '');
   const sd = $('#selldups'); sd.textContent = di.n ? '중복 ' + di.n + '장 모두 팔기 +' + di.c + '🪙' : '중복 카드 없음'; sd.classList.toggle('off', !di.n);
-  const grades = [...new Set(have.map(id => CARDS[id][0]))].sort((a, b) => b - a);
+  const grades = [...new Set(E.map(e => CARDS[e.id][0]))].sort((a, b) => b - a);
   if (invFilter >= 0 && !grades.includes(invFilter)) invFilter = -1;
   const fkey = grades.join(',') + '|' + invFilter, fb = $('#invfilter');
   if (fb.dataset.k !== fkey) {
@@ -672,24 +835,32 @@ function renderInv(di) {
     fb.innerHTML = '<button data-g="-1" class="' + (invFilter < 0 ? 'on' : '') + '">전체</button>' +
       grades.map(g => '<button data-g="' + g + '" class="' + gcls(g) + (invFilter === g ? ' on' : '') + '">' + GRADES[g] + '</button>').join('');
   }
-  const show = have.filter(id => invFilter < 0 || CARDS[id][0] === invFilter).sort((a, b) => CARDS[b][0] - CARDS[a][0] || a - b);
-  const grid = $('#invgrid');
-  for (const k in invCells) if (!show.includes(+k)) { invCells[k].remove(); delete invCells[k]; }
-  show.forEach(id => {
-    let e = invCells[id];
-    if (!e) {
-      const g = CARDS[id][0], p = CONFIG.SELL_PRICE[g];
-      e = invCells[id] = document.createElement('div'); e.className = 'ic ' + gcls(g) + (g === 7 ? ' sssc' : '');
-      e.innerHTML = '<span class="gr">' + GRADES[g] + '</span><span class="n"></span><div class="art">' + invArt(id) + '</div><div class="nm">' + CARDS[id][2] + '</div><div class="st">★' + CARDS[id][3] + ' · 배치 시 분당 ' + placeRate(id) + '🪙</div>' +
-        '<button class="s1" data-act="one" data-id="' + id + '">1장 팔기 +' + p + '🪙</button><button data-act="dup" data-id="' + id + '"></button>';
+  const show = E.filter(e => invFilter < 0 || CARDS[e.id][0] === invFilter), keys = new Set(show.map(e => e.k)), cost = gradeCost();
+  for (const k in invCells) if (!keys.has(k)) { invCells[k].remove(); delete invCells[k]; }
+  show.forEach(e => {
+    const id = e.id, g = CARDS[id][0]; let el = invCells[e.k];
+    if (!el) {
+      el = invCells[e.k] = document.createElement('div');
+      el.className = 'ic ' + gcls(g) + (g === 7 ? ' sssc' : '') + (e.type === 1 ? ' slab' : e.type === 2 ? ' grading' : '');
+      el.innerHTML = cardTop(id) + (e.type === 0
+        ? '<button class="s1" data-act="one" data-id="' + id + '"></button><button data-act="dup" data-id="' + id + '"></button><button class="gb" data-act="grade" data-id="' + id + '"></button>'
+        : e.type === 1 ? '<button class="s1" data-act="slab" data-u="' + e.s.u + '"></button>' : '');
     }
-    const n = G.owned[id], p = CONFIG.SELL_PRICE[CARDS[id][0]];
-    e.querySelector('.n').textContent = '×' + n;
-    const b = e.querySelector('[data-act=dup]'); b.hidden = n < 2; b.textContent = '1장 남기고 팔기 +' + (n - 1) * p + '🪙';
+    const n = el.querySelector('.n'), cd = el.querySelector('.cd');
+    if (e.type === 0) {
+      const p = sellPrice(id);
+      n.textContent = '×' + e.n; cd.textContent = '💎 ? 상태 미확인';
+      el.querySelector('[data-act=one]').textContent = '1장 팔기 +' + p + '🪙';
+      const b = el.querySelector('[data-act=dup]'); b.hidden = e.n < 2; b.textContent = '1장 남기고 팔기 +' + (e.n - 1) * p + '🪙';
+      const gb = el.querySelector('[data-act=grade]'); gb.textContent = '🔍 감정 ' + cost + '🪙'; gb.classList.toggle('off', G.coins < cost);
+    } else if (e.type === 1) {
+      n.textContent = '💎' + e.s.lv; cd.textContent = '감정 완료 · 판매·수입 ×' + condMult(e.s.lv).toFixed(1);
+      el.querySelector('[data-act=slab]').textContent = '팔기 +' + sellPrice(id, e.s.lv) + '🪙';
+    } else { n.textContent = '🔍'; cd.textContent = '감정 중 · ' + fmtT(Math.max(0, e.x.t)) + ' 남음'; }
   });
-  const key = show.join(',');
-  if (key !== invOrder) { invOrder = key; show.forEach(id => grid.appendChild(invCells[id])); }
-  $('#invempty').style.display = have.length ? 'none' : '';
+  const grid = $('#invgrid'), key = show.map(e => e.k).join(',');
+  if (key !== invOrder) { invOrder = key; show.forEach(e => grid.appendChild(invCells[e.k])); }
+  $('#invempty').style.display = E.length ? 'none' : '';
 }
 // ---- 배치 화면 ----
 const placeEls = [], pickCells = {}; let pickOrder = '';
@@ -704,34 +875,36 @@ function renderPlace() {
   placeDirty = false;
   const full = G.placed.length >= CONFIG.PLACE_MAX;
   placeEls.forEach((d, i) => {
-    const p = G.placed[i], key = p ? 'c' + p.id : 'e';
+    const p = G.placed[i], key = p ? p.id + '_' + (p.u || 'r') + '_' + copyRate(p) : 'e';
     if (d.dataset.k === key) return; d.dataset.k = key;
     if (!p) { d.className = 'ic ps empty'; d.innerHTML = '<div class="art">＋</div><div class="nm">빈 자리</div><div class="sub">아래에서 카드를 골라요</div>'; return; }
     const g = CARDS[p.id][0];
-    d.className = 'ic ps ' + gcls(g) + (g === 7 ? ' sssc' : '');
-    d.innerHTML = '<span class="gr">' + GRADES[g] + '</span><span class="n">★' + CARDS[p.id][3] + '</span><div class="art">' + invArt(p.id) + '</div><div class="nm">' + CARDS[p.id][2] + '</div>' +
-      '<div class="sub">분당 +' + placeRate(p.id) + '🪙</div><div class="pb"><i></i></div><button data-act="un" data-i="' + i + '">내리기</button>';
+    d.className = 'ic ps ' + gcls(g) + (g === 7 ? ' sssc' : '') + (p.lv ? ' slab' : '');
+    d.innerHTML = cardTop(p.id) + '<div class="sub">분당 +' + copyRate(p) + '🪙</div><div class="pb"><i></i></div><button data-act="un" data-i="' + i + '">내리기</button>';
+    d.querySelector('.n').textContent = p.lv ? '💎' + p.lv : '💎?';
+    d.querySelector('.cd').textContent = p.lv ? '🛡️ 케이스 보호(안 닳음)' : '⚠️ 상태가 조금씩 닳는 중';
   });
-  const inc = G.placed.reduce((a, p) => a + placeRate(p.id), 0);
+  const inc = G.placed.reduce((a, p) => a + copyRate(p), 0);
   $('#placesum').textContent = '· ' + G.placed.length + '/' + CONFIG.PLACE_MAX + ' · 분당 총 ' + inc + '🪙 · 지금까지 ' + G.earned + '🪙';
-  const have = []; CARDS.forEach((c, id) => { if (G.owned[id] > 0) have.push(id); });
-  have.sort((a, b) => placeRate(b) - placeRate(a) || a - b);
-  const list = $('#picklist');
-  for (const k in pickCells) if (!have.includes(+k)) { pickCells[k].remove(); delete pickCells[k]; }
-  have.forEach(id => {
-    let e = pickCells[id];
-    if (!e) {
-      const g = CARDS[id][0];
-      e = pickCells[id] = document.createElement('div'); e.className = 'ic ' + gcls(g) + (g === 7 ? ' sssc' : '');
-      e.innerHTML = '<span class="gr">' + GRADES[g] + ' ★' + CARDS[id][3] + '</span><span class="n"></span><div class="art">' + invArt(id) + '</div><div class="nm">' + CARDS[id][2] + '</div>' +
-        '<div class="st">분당 +' + placeRate(id) + '🪙</div><button class="s1" data-act="put" data-id="' + id + '"></button>';
+  const E = invEntries().filter(e => e.type < 2).map(e => ({ ...e, rate: copyRate({ id: e.id, lv: e.type === 1 ? e.s.lv : 0 }) }));
+  E.sort((a, b) => b.rate - a.rate || a.id - b.id || a.type - b.type);
+  const list = $('#picklist'), keys = new Set(E.map(e => e.k));
+  for (const k in pickCells) if (!keys.has(k)) { pickCells[k].remove(); delete pickCells[k]; }
+  E.forEach(e => {
+    let el = pickCells[e.k];
+    if (!el) {
+      const g = CARDS[e.id][0];
+      el = pickCells[e.k] = document.createElement('div'); el.className = 'ic ' + gcls(g) + (g === 7 ? ' sssc' : '') + (e.type === 1 ? ' slab' : '');
+      el.innerHTML = cardTop(e.id) + '<div class="st"></div><button class="s1" data-act="put" ' + (e.type === 1 ? 'data-u="' + e.s.u + '"' : 'data-id="' + e.id + '"') + '></button>';
+      el.querySelector('.cd').textContent = e.type === 1 ? '감정 완료 · 안 닳음' : '💎? 감정 전';
     }
-    e.querySelector('.n').textContent = '×' + G.owned[id];
-    const b = e.querySelector('[data-act=put]'); b.textContent = full ? '자리 없음' : '놓기'; b.classList.toggle('s1', !full);
+    el.querySelector('.n').textContent = e.type === 1 ? '💎' + e.s.lv : '×' + e.n;
+    el.querySelector('.st').textContent = '분당 +' + e.rate + '🪙';
+    const b = el.querySelector('[data-act=put]'); b.textContent = full ? '자리 없음' : '놓기'; b.classList.toggle('s1', !full);
   });
-  const key = have.join(',');
-  if (key !== pickOrder) { pickOrder = key; have.forEach(id => list.appendChild(pickCells[id])); }
-  $('#pickempty').style.display = have.length ? 'none' : '';
+  const key = E.map(e => e.k).join(',');
+  if (key !== pickOrder) { pickOrder = key; E.forEach(e => list.appendChild(pickCells[e.k])); }
+  $('#pickempty').style.display = E.length ? 'none' : '';
 }
 // 도감 창 그리기
 function renderDex() {
@@ -739,7 +912,7 @@ function renderDex() {
   for (let gi = 7; gi >= 0; gi--) {
     const row = document.createElement('div'); row.className = 'dexrow ' + gcls(gi);
     let have = 0, tot = 0, cells = '';
-    CARDS.forEach((c, id) => { if (c[0] !== gi) return; tot++; const n = G.owned[id] || 0; if (G.seen[id]) have++;
+    CARDS.forEach((c, id) => { if (c[0] !== gi) return; tot++; const n = held(id); if (G.seen[id]) have++;
       cells += G.seen[id] ? '<div class="dc ' + gcls(gi) + '" title="' + c[2] + '">' + (CARD_IMG[id] ? '<img src="' + IMG[CARD_IMG[id]] + '" alt="">' : c[1]) + (n ? '<small>×' + n + '</small>' : '') + '</div>' : '<div class="dc no ' + gcls(gi) + '">?</div>'; });
     row.innerHTML = '<span class="gl">' + GRADES[gi] + '</span>' + cells; g.appendChild(row);
   }
@@ -750,7 +923,7 @@ function showResult() {
   screen = 'result'; setTab('cart');
   const t = G.winT; let newBest = false;
   if (!best || t < best) { best = t; newBest = true; try { localStorage.setItem(BESTKEY, String(Math.floor(t))); } catch (e) {} }
-  $('#resinfo').innerHTML = '완성 시간 <b>' + fmtT(t) + '</b> · 깐 팩 ' + G.packs + '개 · 직원 ' + G.staff.length + '명<br>최고 기록 <b>' + fmtT(best) + '</b>' + (newBest ? ' 🏆 새 기록!' : '');
+  $('#resinfo').innerHTML = '완성 시간 <b>' + fmtT(t) + '</b> · 깐 팩 ' + G.packs + '개 · 직원 ' + G.staff.length + '명<br>최고 기록 <b>' + fmtT(best) + '</b>' + (newBest ? ' 🏆 새 기록!' : '') + '<br><small>계속 하면 감정·배치·이벤트를 이어서 할 수 있어요.</small>';
   $('#result').classList.add('on'); flash(.6, 900); burst(innerWidth / 2, innerHeight / 3, 'rain', 200, 600);
   if (!DEMO) sfx.sss();
 }
@@ -759,23 +932,32 @@ function startGame() {
   audio(); newGame(); buildSlots(); seenDup = false; firstFlip = false;
   $('#cards').innerHTML = ''; $('#idlepack').style.display = ''; $('#title').classList.remove('on'); $('#result').classList.remove('on');
   for (const k in invCells) { invCells[k].remove(); delete invCells[k]; } invOrder = ''; invFilter = -1; buildPlace();
+  const eb = $('#evbar'); eb.dataset.k = ''; eb.className = ''; eb.innerHTML = '';
   screen = 'play'; setTab('cart');
 }
+// 도감 완성 뒤 계속 하기
+function continueGame() { $('#result').classList.remove('on'); screen = 'play'; updateUI(); }
 
 // ---- 입력(키보드 + 터치) ----
 $('#startbtn').addEventListener('click', startGame);
 $('#againbtn').addEventListener('click', startGame);
+$('#contbtn').addEventListener('click', continueGame);
+$('#evbar').addEventListener('click', e => { if (e.target.closest('#chase')) { audio(); chaseThief(); } });
 $('#tabbar').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { audio(); setTab(b.dataset.tab); } });
 $('#pplace').addEventListener('click', e => {
   const b = e.target.closest('button[data-act]'); if (!b) return; audio();
-  if (b.dataset.act === 'un') unplace(+b.dataset.i); else if (!place(+b.dataset.id)) sfx.nope();
+  if (b.dataset.act === 'un') unplace(+b.dataset.i);
+  else if (!(b.dataset.u ? placeSlab(+b.dataset.u) : place(+b.dataset.id))) sfx.nope();
 });
 $('#selldups').addEventListener('click', () => { audio(); if (!sellDups()) sfx.nope(); });
 $('#invfilter').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { invFilter = +b.dataset.g; invDirty = true; updateUI(); } });
 $('#invgrid').addEventListener('click', e => {
   const b = e.target.closest('button[data-act]'); if (!b) return; audio();
-  const id = +b.dataset.id, n = G.owned[id] || 0;
-  if (!sellCard(id, b.dataset.act === 'dup' ? n - 1 : 1)) sfx.nope();
+  const a = b.dataset.act, id = +b.dataset.id; let ok;
+  if (a === 'slab') ok = sellSlab(+b.dataset.u);
+  else if (a === 'grade') { ok = sendGrade(id); if (!ok && G.coins < gradeCost()) toast('🔍 감정비 ' + gradeCost() + '🪙이 부족해요', 0); }
+  else ok = sellCard(id, a === 'dup' ? rawCount(id) - 1 : 1);
+  if (!ok) sfx.nope();
 });
 $('#hire').addEventListener('click', () => { audio(); doHire(); });
 $('#flipall').addEventListener('click', () => { audio(); if (G.reveal) flipAllSlow(); });
@@ -793,7 +975,8 @@ addEventListener('keydown', e => {
   if (e.repeat) return; audio();
   const k = e.key;
   if (screen === 'title') { if (k === 'Enter' || k === ' ') { e.preventDefault(); startGame(); } return; }
-  if (screen === 'result') { if (k === 'Enter' || k === ' ') { e.preventDefault(); startGame(); } return; }
+  if (screen === 'result') { if (k === 'Enter' || k === ' ') { e.preventDefault(); continueGame(); } return; }
+  if ((k === 't' || k === 'T') && chaseThief()) return;
   if (k === 'd' || k === 'D') { setTab(tab === 'dex' ? 'cart' : 'dex'); return; }
   if (k === 'i' || k === 'I') { setTab(tab === 'inv' ? 'cart' : 'inv'); return; }
   if (k === 'b' || k === 'B') { setTab(tab === 'place' ? 'cart' : 'place'); return; }
@@ -813,8 +996,10 @@ function demoStep(dt) {
   demoT -= dt; if (demoT > 0) return; demoT = 0.55;
   if (screen === 'title') { startGame(); return; }
   if (screen === 'result') { demoResT += 0.55; if (demoResT > 6) { demoResT = 0; startGame(); } return; }
+  if (chaseThief()) return;
   if (hasHidden()) { flipNext(); return; }
-  if (G.placed.length < CONFIG.PLACE_MAX) { const ids = CARDS.map((c, id) => id).filter(id => G.owned[id] > 0).sort((a, b) => placeRate(b) - placeRate(a)); if (ids.length) { place(ids[0]); return; } }
+  if (G.placed.length < CONFIG.PLACE_MAX) { const ids = CARDS.map((c, id) => id).filter(id => rawCount(id) > 0).sort((a, b) => placeRate(b) - placeRate(a)); if (ids.length) { place(ids[0]); return; } }
+  if (G.coins >= gradeCost() + 150 && G.grading.length < 2) { const ids = CARDS.map((c, id) => id).filter(id => rawCount(id) > 0).sort((a, b) => placeRate(b) - placeRate(a)); if (ids.length) { sendGrade(ids[0]); return; } }
   if (dupInfo().c >= 15) { sellDups(); return; }
   if (G.staff.length < 4 && G.coins >= staffCost()) { doHire(); return; }
   if (G.coins >= CONFIG.PACKS[2].cost + 40) { doBuy(2); return; }
@@ -831,7 +1016,7 @@ function frame() {
   catch (e) { window.__err = String(e && e.stack || e); console.error(e); }
 }
 buildBuy(); newGame(); buildSlots(); buildPlace(); updateUI();
-window.__game = { get G() { return G; }, CONFIG, CARDS, tick, buyPack, hire, place, unplace, placeRate, sellCard, sellDups, dupInfo, setTab, flipCard, flipNext, newGame, staffCost, startGame, get screen() { return screen; } };
+window.__game = { get G() { return G; }, CONFIG, CARDS, tick, buyPack, hire, place, placeSlab, unplace, placeRate, copyRate, sendGrade, sellSlab, startEvent, chaseThief, held, rawCount, condLv, sellCard, sellDups, dupInfo, setTab, flipCard, flipNext, newGame, staffCost, startGame, get screen() { return screen; } };
 setInterval(frame, 33); // 화면 갱신 루프(33ms)
 window.addEventListener('error', e => { window.__err = (window.__err || '') + e.message + ' '; });
 </script>
